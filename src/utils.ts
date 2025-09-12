@@ -4,31 +4,61 @@ import path from 'path';
 
 export async function collectFiles(repoPath: string, include?: string[], exclude?: string[]): Promise<string[]> {
     const ignorePatterns = fs.existsSync(path.join(repoPath, '.gitignore'))
-        ? fs.readFileSync(path.join(repoPath, '.gitignore'), 'utf-8').split('\n').filter(line => line.trim() !== '' && !line.startsWith('#'))
+        ? fs.readFileSync(path.join(repoPath, '.gitignore'), 'utf-8')
+            .split('\n')
+            .filter(line => line.trim() !== '' && !line.startsWith('#'))
+            .map(line => line.trim())
         : [];
 
-    const files = await glob(include || '**/*', {
+    const patterns = include && include.length > 0 ? include : ['**/*'];
+    const defaultIgnore = ['node_modules/**', '.git/**', '*.log', 'dist/**', 'build/**'];
+    
+    const files = await glob(patterns, {
         cwd: repoPath,
         nodir: true,
-        ignore: ['node_modules/**', '.git/**', ...ignorePatterns, ...(exclude || [])],
+        ignore: [...defaultIgnore, ...ignorePatterns, ...(exclude || [])],
     });
 
     return files;
 }
 
-// src/utils.ts
+export async function readFileContents(filePath: string): Promise<string> {
+    try {
+        // Check if file is likely binary
+        if (isBinaryFile(filePath)) {
+            return `[Binary file: ${path.basename(filePath)} (${fs.statSync(filePath).size} bytes)]`;
+        }
 
-export function readFileContents(filePath: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const fs = require('fs');
-        fs.readFile(filePath, 'utf8', (err: NodeJS.ErrnoException | null, data: string) => {
-            if (err) {
-                reject(err);
-            } else {
-                resolve(data);
-            }
-        });
-    });
+        const content = await fs.promises.readFile(filePath, 'utf8');
+        
+        // Truncate very large files (>16KB as mentioned in requirements)
+        const maxSize = 16 * 1024; // 16KB
+        if (content.length > maxSize) {
+            const truncated = content.substring(0, maxSize);
+            const lastNewline = truncated.lastIndexOf('\n');
+            const finalContent = lastNewline > 0 ? truncated.substring(0, lastNewline) : truncated;
+            return `${finalContent}\n\n... [File truncated: showing first ${finalContent.length} characters of ${content.length}]`;
+        }
+        
+        return content;
+    } catch (error: any) {
+        throw new Error(`Cannot read file: ${error.message}`);
+    }
+}
+
+function isBinaryFile(filePath: string): boolean {
+    const binaryExtensions = [
+        '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.ico', '.svg',
+        '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+        '.zip', '.tar', '.gz', '.rar', '.7z',
+        '.exe', '.dll', '.so', '.dylib',
+        '.mp3', '.mp4', '.avi', '.mov', '.wav',
+        '.ttf', '.otf', '.woff', '.woff2',
+        '.pyc', '.class', '.o', '.obj'
+    ];
+    
+    const ext = path.extname(filePath).toLowerCase();
+    return binaryExtensions.includes(ext);
 }
 
 export function formatOutput(content: string): string {
@@ -41,5 +71,3 @@ export function truncateContent(content: string, maxLength: number): string {
     }
     return content;
 }
-
-// Additional utility functions can be added here as needed.

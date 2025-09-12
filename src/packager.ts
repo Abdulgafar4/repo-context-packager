@@ -5,7 +5,7 @@ import { getGitInfo } from './git';
 import { collectFiles, readFileContents } from './utils';
 
 export class Packager {
-    private repoPath: string;
+    private paths: string[];
     private repoInfo: RepoInfo;
     private include?: string[];
     private exclude?: string[];
@@ -13,8 +13,9 @@ export class Packager {
     private maxFileSize?: number;
     private maxTokens?: number;
 
-    constructor(repoPath: string, options: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number } = {}) {
-        this.repoPath = repoPath;
+    constructor(paths: string | string[], options: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number } = {}) {
+        // Handle both single path and array of paths
+        this.paths = Array.isArray(paths) ? paths : [paths];
         this.include = options.include;
         this.exclude = options.exclude;
         this.tokens = options.tokens || false;
@@ -30,31 +31,62 @@ export class Packager {
     }
 
     public async analyzeRepository(): Promise<void> {
-        this.repoInfo.gitInfo = await getGitInfo(this.repoPath);
+        // For multiple paths, use the first directory or current directory for git info
+        const primaryPath = this.paths.find(p => fs.existsSync(p) && fs.statSync(p).isDirectory()) || this.paths[0] || '.';
+        this.repoInfo.gitInfo = getGitInfo(primaryPath);
         
-        const filePaths = await collectFiles(this.repoPath, this.include, this.exclude);
+        const allFilePaths: string[] = [];
+        
+        // Collect files from all paths
+        for (const singlePath of this.paths) {
+            if (fs.existsSync(singlePath)) {
+                const stat = fs.statSync(singlePath);
+                if (stat.isFile()) {
+                    // If it's a file, add it directly (use relative path if possible)
+                    const relativePath = path.relative(primaryPath, singlePath) || singlePath;
+                    allFilePaths.push(relativePath);
+                } else if (stat.isDirectory()) {
+                    // If it's a directory, collect files from it
+                    const dirFiles = await collectFiles(singlePath, this.include, this.exclude);
+                    allFilePaths.push(...dirFiles.map(f => path.join(singlePath, f)));
+                }
+            } else {
+                process.stderr.write(`Warning: Path '${singlePath}' does not exist\n`);
+            }
+        }
         
         const fileInfos: FileInfo[] = [];
         let currentTokens = 0;
 
-        for (const filePath of filePaths) {
-            const fullPath = path.join(this.repoPath, filePath);
-            const stats = await fs.promises.stat(fullPath);
+        for (const filePath of allFilePaths) {
+            try {
+                const fullPath = path.isAbsolute(filePath) ? filePath : path.join(primaryPath, filePath);
+                const stats = await fs.promises.stat(fullPath);
 
-            if (this.maxFileSize && stats.size > this.maxFileSize) {
-                continue;
+                if (this.maxFileSize && stats.size > this.maxFileSize) {
+                    process.stderr.write(`Skipping ${filePath}: file too large (${stats.size} bytes)\n`);
+                    continue;
+                }
+
+                const content = await readFileContents(fullPath);
+                const lines = content.split('\n').length;
+                const fileTokens = Math.round(content.length / 4);
+
+                if (this.maxTokens && (currentTokens + fileTokens) > this.maxTokens) {
+                    process.stderr.write(`Stopping at ${filePath}: token limit reached\n`);
+                    break;
+                }
+                
+                currentTokens += fileTokens;
+                fileInfos.push({ 
+                    path: filePath, 
+                    content, 
+                    lines, 
+                    size: stats.size 
+                });
+            } catch (error: any) {
+                process.stderr.write(`Warning: Could not read file '${filePath}': ${error.message}\n`);
             }
-
-            const content = await readFileContents(fullPath);
-            const lines = content.split('\n').length;
-            const fileTokens = Math.round(content.length / 4);
-
-            if (this.maxTokens && (currentTokens + fileTokens) > this.maxTokens) {
-                break;
-            }
-            
-            currentTokens += fileTokens;
-            fileInfos.push({ path: filePath, content, lines, size: stats.size });
         }
         
         this.repoInfo.files = fileInfos;
@@ -63,12 +95,13 @@ export class Packager {
         this.repoInfo.totalTokens = this.calculateTotalTokens(this.repoInfo.files);
     }
 
+    // Make sure these methods exist and are properly defined
     private calculateTotalLines(files: FileInfo[]): number {
-        return files.reduce((total, file) => total + file.content.split('\n').length, 0);
+        return files.reduce((total, file) => total + file.lines, 0);
     }
 
     private calculateTotalTokens(files: FileInfo[]): number {
-        return Math.round(files.reduce((total, file) => total + file.content.length / 4, 0));
+        return files.reduce((total, file) => total + Math.round(file.content.length / 4), 0);
     }
 
     public getRepoInfo(): RepoInfo {
@@ -76,8 +109,11 @@ export class Packager {
     }
 
     public generatePackage(): string {
+        // Get the primary path for display
+        const primaryPath = this.paths[0] || '.';
+        
         let output = `# Repository Context\n\n`;
-        output += `## File System Location\n\n${path.resolve(this.repoPath)}\n\n`;
+        output += `## File System Location\n\n${path.resolve(primaryPath)}\n\n`;
 
         if (this.repoInfo.gitInfo) {
             output += `## Git Info\n\n`;
@@ -86,24 +122,24 @@ export class Packager {
             output += `- Author: ${this.repoInfo.gitInfo.author}\n`;
             output += `- Date: ${this.repoInfo.gitInfo.date}\n\n`;
         } else {
-            output += `## Git Info\n\nNot a git repository.\n\n`;
+            output += `## Git Info\n\nNot a git repository\n\n`;
         }
 
-        output += `## Structure\n\n\
-${this.generateFileTree()}
-\
-\n`;
+        output += `## Structure\n\n`;
+        output += '```\n';
+        output += this.generateFileTree();
+        output += '\n```\n\n';
 
         output += `## File Contents\n\n`;
         for (const file of this.repoInfo.files) {
+            const fileExtension = path.extname(file.path).slice(1);
             output += `### File: ${file.path}\n`;
-            output += `\
-${file.content}
-\
-\n`;
+            output += '```' + (fileExtension || 'txt') + '\n';
+            output += file.content;
+            output += '\n```\n\n';
         }
 
-        output += `## Summary\n\n`;
+        output += `## Summary\n`;
         output += `- Total files: ${this.repoInfo.totalFiles}\n`;
         output += `- Total lines: ${this.repoInfo.totalLines}\n`;
         if (this.tokens) {
@@ -114,32 +150,54 @@ ${file.content}
     }
 
     private generateFileTree(): string {
-        const root = {};
+        const root: any = {};
+        
+        // Build tree structure
         for (const file of this.repoInfo.files) {
-            const parts = file.path.split(path.sep);
-            let node = root;
-            for (const part of parts) {
-                node[part] = node[part] || {};
-                node = node[part];
+            const parts = file.path.split(path.sep).filter(part => part !== '');
+            let current = root;
+            
+            for (let i = 0; i < parts.length; i++) {
+                const part = parts[i];
+                const isFile = i === parts.length - 1;
+                
+                if (!current[part]) {
+                    current[part] = isFile ? null : {};
+                }
+                
+                if (!isFile) {
+                    current = current[part];
+                }
             }
         }
 
-        const generateTree = (node, prefix = '') => {
+        // Generate tree string
+        const generateTreeString = (node: any, prefix: string = '', isLast: boolean = true): string => {
             let result = '';
-            const entries = Object.keys(node);
-            for (let i = 0; i < entries.length; i++) {
-                const entry = entries[i];
-                const isLast = i === entries.length - 1;
-                const connector = isLast ? '└── ' : '├── ';
-                result += `${prefix}${connector}${entry}\n`;
-                if (Object.keys(node[entry]).length > 0) {
-                    const newPrefix = prefix + (isLast ? '    ' : '│   ');
-                    result += generateTree(node[entry], newPrefix);
+            const entries = Object.keys(node).sort((a, b) => {
+                // Directories first, then files
+                const aIsFile = node[a] === null;
+                const bIsFile = node[b] === null;
+                if (aIsFile !== bIsFile) {
+                    return aIsFile ? 1 : -1;
                 }
-            }
+                return a.localeCompare(b);
+            });
+
+            entries.forEach((key, index) => {
+                const isLastEntry = index === entries.length - 1;
+                const connector = isLastEntry ? '└── ' : '├── ';
+                result += prefix + connector + key + '\n';
+
+                if (node[key] !== null && typeof node[key] === 'object') {
+                    const newPrefix = prefix + (isLastEntry ? '    ' : '│   ');
+                    result += generateTreeString(node[key], newPrefix, isLastEntry);
+                }
+            });
+
             return result;
         };
 
-        return generateTree(root).trim();
+        return generateTreeString(root).trim();
     }
 }
