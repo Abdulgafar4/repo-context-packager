@@ -16,6 +16,7 @@ program
   .option('--tokens', 'Estimate token counts')
   .option('--max-file-size <size>', 'Limit output to files under specified size (in bytes)')
   .option('--max-tokens <count>', 'Limit total output to specified number of tokens')
+  .option('--summary', 'Show function signatures and key info instead of full code')
   .action(async (paths, options) => { // Changed from 'path' to 'paths'
     // Input validation
     if (!paths || paths.length === 0) {
@@ -26,7 +27,7 @@ program
     console.log(chalk.blue.bold('📦 Repository Context Packager'));
     console.log(chalk.gray('━'.repeat(50)));
 
-    const packagerOptions: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number } = {};
+    const packagerOptions: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number, summary?: boolean } = {};
     
     if (options.include) {
       packagerOptions.include = options.include.split(',').map((p: string) => p.trim());
@@ -36,6 +37,9 @@ program
     }
     if (options.tokens) {
       packagerOptions.tokens = options.tokens;
+    }
+    if (options.summary) {
+      packagerOptions.summary = options.summary;
     }
     if (options.maxFileSize) {
       const maxFileSize = parseInt(options.maxFileSize, 10);

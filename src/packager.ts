@@ -3,6 +3,7 @@ import path from 'path';
 import { RepoInfo, FileInfo } from './types';
 import { getGitInfo } from './git';
 import { collectFiles, readFileContents } from './utils';
+import { summarizeCode, formatSummary } from './summarizer';
 
 export class Packager {
     private paths: string[];
@@ -12,8 +13,9 @@ export class Packager {
     private tokens: boolean;
     private maxFileSize?: number;
     private maxTokens?: number;
+    private summary: boolean;
 
-    constructor(paths: string | string[], options: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number } = {}) {
+    constructor(paths: string | string[], options: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number, summary?: boolean } = {}) {
         // Handle both single path and array of paths
         this.paths = Array.isArray(paths) ? paths : [paths];
         this.include = options.include;
@@ -21,6 +23,7 @@ export class Packager {
         this.tokens = options.tokens || false;
         this.maxFileSize = options.maxFileSize;
         this.maxTokens = options.maxTokens;
+        this.summary = options.summary || false;
         this.repoInfo = {
             gitInfo: null,
             files: [],
@@ -165,11 +168,18 @@ export class Packager {
 
         output += `## File Contents\n\n`;
         for (const file of this.repoInfo.files) {
-            const fileExtension = path.extname(file.path).slice(1);
-            output += `### File: ${file.path}\n`;
-            output += '```' + (fileExtension || 'txt') + '\n';
-            output += file.content;
-            output += '\n```\n\n';
+            if (this.summary) {
+                // Generate summary for code files
+                const summary = summarizeCode(file.content, file.path);
+                output += formatSummary(summary);
+            } else {
+                // Full content (original behavior)
+                const fileExtension = path.extname(file.path).slice(1);
+                output += `### File: ${file.path}\n`;
+                output += '```' + (fileExtension || 'txt') + '\n';
+                output += file.content;
+                output += '\n```\n\n';
+            }
         }
 
         output += `## Summary\n`;

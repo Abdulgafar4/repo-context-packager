@@ -5,11 +5,17 @@ The Repository Context Packager is a command-line tool designed to analyze local
 
 ## Features
 - Analyzes local git repositories.
+- **Two output modes**:
+  - **Full mode**: Complete file contents with syntax highlighting
+  - **Summary mode**: Function signatures and key information (85% smaller)
 - Collects and formats repository information, including:
   - Basic git information (commit, branch, author, date).
   - Project structure overview.
   - File contents with clear separators.
   - Basic metadata and summary statistics.
+- **Smart filtering**: Automatically excludes unnecessary files (node_modules, lock files, documentation)
+- **Multi-language support**: TypeScript, JavaScript, Python, and more
+- **Token estimation**: Calculate LLM token usage for better context management
 
 ## Installation
 To install the Repository Context Packager, clone the repository and install the dependencies:
@@ -64,20 +70,51 @@ npm start . --tokens --max-tokens 50000
 npm start . --exclude "*.log,*.tmp"
 ```
 
-## Output Format
-The output will be structured as follows:
+### Generate function summaries (85% smaller output)
+```bash
+npm start . --summary
+```
 
+### Combine summary mode with token estimation
+```bash
+npm start . --summary --tokens
+```
+
+## Output Modes
+
+### Full Mode (Default)
+Complete file contents with syntax highlighting:
+```markdown
+### File: src/utils.ts
+```typescript
+export async function collectFiles(repoPath: string): Promise<string[]> {
+  // Full function implementation...
+}
+```
+
+### Summary Mode (`--summary`)
+Function signatures and key information only:
+```markdown
+### File: src/utils.ts
+```typescript
+// File contains 5 items, 111 lines
+// Imports: glob, fs, path
+
+export async function collectFiles(repoPath: string, include?: string[], exclude?: string[]): Promise<string[]>
+export async function readFileContents(filePath: string): Promise<string>
+export function formatOutput(content: string): string
+```
+
+## Output Structure
 ```
 # Repository Context
 
 ## File System Location
-
 /absolute/path/to/repo/being/analyzed
 
 ## Git Info
-
 - Commit: <commit-sha>
-- Branch: <branch-name>
+- Branch: <branch-name>  
 - Author: <author-name>
 - Date: <commit-date>
 
@@ -85,13 +122,12 @@ The output will be structured as follows:
 <project-structure>
 
 ## File Contents
-
-### File: <file-name>
-<file-content>
+<files-in-chosen-mode>
 
 ## Summary
 - Total files: <file-count>
 - Total lines: <line-count>
+- Estimated tokens: <token-count> (if --tokens used)
 ```
 
 ## Contributing
