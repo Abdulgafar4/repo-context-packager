@@ -23,8 +23,8 @@ To install the Repository Context Packager, clone the repository and install the
 ```bash
 git clone <repository-url>
 cd repo-context-packager
-npm build
 npm install
+npm run build
 ```
 
 ## Usage
