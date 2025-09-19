@@ -10,7 +10,23 @@ export interface GitInfo {
 
 export function getGitInfo(repoPath?: string): GitInfo | null {
     try {
-        const options = repoPath ? { cwd: path.resolve(repoPath) } : {};
+        const resolvedPath = repoPath ? path.resolve(repoPath) : process.cwd();
+        
+        // Check if directory exists
+        if (repoPath && !require('fs').existsSync(resolvedPath)) {
+            process.stderr.write(`Warning: Directory '${repoPath}' does not exist.\n`);
+            return null;
+        }
+        
+        const options = { cwd: resolvedPath, stdio: 'pipe' as const };
+        
+        // Check if it's a git repository first
+        try {
+            execSync('git rev-parse --git-dir', options);
+        } catch {
+            process.stderr.write(`Warning: '${resolvedPath}' is not a git repository.\n`);
+            return null;
+        }
         
         const commit = execSync('git rev-parse HEAD', options).toString().trim();
         const branch = execSync('git rev-parse --abbrev-ref HEAD', options).toString().trim();
@@ -18,9 +34,14 @@ export function getGitInfo(repoPath?: string): GitInfo | null {
         const date = execSync('git log -1 --format=%cd', options).toString().trim();
 
         return { commit, branch, author, date };
-    } catch (error) {
-        // Write to stderr instead of console.error for CLI tools
-        process.stderr.write('Warning: Not a git repository or unable to retrieve git information.\n');
+    } catch (error: any) {
+        if (error.message.includes('not a git repository')) {
+            process.stderr.write('Warning: Not a git repository.\n');
+        } else if (error.message.includes('bad revision')) {
+            process.stderr.write('Warning: Git repository has no commits.\n');
+        } else {
+            process.stderr.write(`Warning: Unable to retrieve git information: ${error.message}\n`);
+        }
         return null;
     }
 }

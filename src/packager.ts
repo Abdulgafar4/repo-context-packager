@@ -39,19 +39,37 @@ export class Packager {
         
         // Collect files from all paths
         for (const singlePath of this.paths) {
-            if (fs.existsSync(singlePath)) {
-                const stat = fs.statSync(singlePath);
-                if (stat.isFile()) {
-                    // If it's a file, add it directly (use relative path if possible)
-                    const relativePath = path.relative(primaryPath, singlePath) || singlePath;
-                    allFilePaths.push(relativePath);
-                } else if (stat.isDirectory()) {
-                    // If it's a directory, collect files from it
-                    const dirFiles = await collectFiles(singlePath, this.include, this.exclude);
-                    allFilePaths.push(...dirFiles.map(f => path.join(singlePath, f)));
+            try {
+                if (!fs.existsSync(singlePath)) {
+                    process.stderr.write(`Error: Path '${singlePath}' does not exist\n`);
+                    continue;
                 }
-            } else {
-                process.stderr.write(`Warning: Path '${singlePath}' does not exist\n`);
+                
+                const stat = fs.statSync(singlePath);
+                
+                if (stat.isFile()) {
+                    // Check if file is readable
+                    try {
+                        fs.accessSync(singlePath, fs.constants.R_OK);
+                        const relativePath = path.relative(primaryPath, singlePath) || singlePath;
+                        allFilePaths.push(relativePath);
+                    } catch (accessError) {
+                        process.stderr.write(`Error: Cannot read file '${singlePath}': Permission denied\n`);
+                    }
+                } else if (stat.isDirectory()) {
+                    // Check if directory is readable
+                    try {
+                        fs.accessSync(singlePath, fs.constants.R_OK);
+                        const dirFiles = await collectFiles(singlePath, this.include, this.exclude);
+                        allFilePaths.push(...dirFiles.map(f => path.join(singlePath, f)));
+                    } catch (accessError) {
+                        process.stderr.write(`Error: Cannot read directory '${singlePath}': Permission denied\n`);
+                    }
+                } else {
+                    process.stderr.write(`Warning: '${singlePath}' is neither a file nor a directory\n`);
+                }
+            } catch (error: any) {
+                process.stderr.write(`Error: Cannot access '${singlePath}': ${error.message}\n`);
             }
         }
         
@@ -61,10 +79,17 @@ export class Packager {
         for (const filePath of allFilePaths) {
             try {
                 const fullPath = path.isAbsolute(filePath) ? filePath : path.join(primaryPath, filePath);
+                
+                // Check if file still exists (could have been deleted between collection and processing)
+                if (!fs.existsSync(fullPath)) {
+                    process.stderr.write(`Warning: File '${filePath}' no longer exists, skipping\n`);
+                    continue;
+                }
+                
                 const stats = await fs.promises.stat(fullPath);
 
                 if (this.maxFileSize && stats.size > this.maxFileSize) {
-                    process.stderr.write(`Skipping ${filePath}: file too large (${stats.size} bytes)\n`);
+                    process.stderr.write(`Skipping ${filePath}: file too large (${stats.size} bytes, limit: ${this.maxFileSize})\n`);
                     continue;
                 }
 
@@ -73,7 +98,7 @@ export class Packager {
                 const fileTokens = Math.round(content.length / 4);
 
                 if (this.maxTokens && (currentTokens + fileTokens) > this.maxTokens) {
-                    process.stderr.write(`Stopping at ${filePath}: token limit reached\n`);
+                    process.stderr.write(`Stopping at ${filePath}: token limit reached (${currentTokens + fileTokens} > ${this.maxTokens})\n`);
                     break;
                 }
                 
@@ -85,7 +110,15 @@ export class Packager {
                     size: stats.size 
                 });
             } catch (error: any) {
-                process.stderr.write(`Warning: Could not read file '${filePath}': ${error.message}\n`);
+                if (error.code === 'ENOENT') {
+                    process.stderr.write(`Error: File '${filePath}' not found\n`);
+                } else if (error.code === 'EACCES') {
+                    process.stderr.write(`Error: Permission denied reading '${filePath}'\n`);
+                } else if (error.code === 'EISDIR') {
+                    process.stderr.write(`Error: '${filePath}' is a directory, not a file\n`);
+                } else {
+                    process.stderr.write(`Error: Could not read file '${filePath}': ${error.message}\n`);
+                }
             }
         }
         
@@ -172,7 +205,7 @@ export class Packager {
         }
 
         // Generate tree string
-        const generateTreeString = (node: any, prefix: string = '', isLast: boolean = true): string => {
+        const generateTreeString = (node: any, prefix: string = ''): string => {
             let result = '';
             const entries = Object.keys(node).sort((a, b) => {
                 // Directories first, then files
@@ -191,7 +224,7 @@ export class Packager {
 
                 if (node[key] !== null && typeof node[key] === 'object') {
                     const newPrefix = prefix + (isLastEntry ? '    ' : '│   ');
-                    result += generateTreeString(node[key], newPrefix, isLastEntry);
+                    result += generateTreeString(node[key], newPrefix);
                 }
             });
 

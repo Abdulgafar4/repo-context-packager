@@ -48,6 +48,21 @@ npm start . -o my-project-context.txt
 npm start . --include "*.js"
 ```
 
+### Package with file size limit (under 10KB)
+```bash
+npm start . --max-file-size 10240
+```
+
+### Package with token estimation and limits
+```bash
+npm start . --tokens --max-tokens 50000
+```
+
+### Exclude certain file patterns
+```bash
+npm start . --exclude "*.log,*.tmp"
+```
+
 ## Output Format
 The output will be structured as follows:
 
