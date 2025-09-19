@@ -42,7 +42,7 @@ npm start /path/to/repo
 
 ### Package specific files
 ```bash
-npm start src/main.js src/utils.js
+npm start src/
 ```
 
 ### Package with output file
