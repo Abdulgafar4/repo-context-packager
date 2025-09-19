@@ -45,11 +45,6 @@ npm start /path/to/repo
 npm start src/
 ```
 
-### Package with output file
-```bash
-npm start . -o my-project-context.txt
-```
-
 ### Package only JavaScript files
 ```bash
 npm start . --include "*.js"
