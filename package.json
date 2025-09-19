@@ -27,7 +27,6 @@
     "commander": "^9.5.0",
     "fs-extra": "^10.0.0",
     "glob": "^11.0.3",
-    "simple-git": "^2.48.0",
     "ts-node": "^10.9.2"
   },
   "devDependencies": {
