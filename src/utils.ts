@@ -11,7 +11,45 @@ export async function collectFiles(repoPath: string, include?: string[], exclude
         : [];
 
     const patterns = include && include.length > 0 ? include : ['**/*'];
-    const defaultIgnore = ['node_modules/**', '.git/**', '*.log', 'dist/**', 'build/**'];
+    const defaultIgnore = [
+        'node_modules/**', 
+        '.git/**', 
+        '*.log', 
+        'dist/**', 
+        'build/**',
+        'output.md',
+        '*.lock',
+        'package-lock.json',
+        'yarn.lock',
+        'pnpm-lock.yaml',
+        'bun.lockb',
+        'README.md',
+        'readme.md',
+        'Instruction.md',
+        'instruction.md',
+        'INSTRUCTIONS.md',
+        'LICENSE',
+        'license',
+        'LICENSE.txt',
+        'CHANGELOG.md',
+        'changelog.md',
+        '.gitignore',
+        '.gitattributes',
+        '.env*',
+        '*.env',
+        '.DS_Store',
+        'Thumbs.db',
+        '*.tmp',
+        '*.temp',
+        '*.cache',
+        'coverage/**',
+        '.nyc_output/**',
+        '.vscode/**',
+        '.idea/**',
+        '*.swp',
+        '*.swo',
+        '*~'
+    ];
     
     const files = await glob(patterns, {
         cwd: repoPath,

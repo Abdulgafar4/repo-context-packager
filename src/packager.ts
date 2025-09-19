@@ -89,7 +89,7 @@ export class Packager {
                 const stats = await fs.promises.stat(fullPath);
 
                 if (this.maxFileSize && stats.size > this.maxFileSize) {
-                    process.stderr.write(`Skipping ${filePath}: file too large (${stats.size} bytes, limit: ${this.maxFileSize})\n`);
+                    process.stderr.write(`⚠️  Skipping ${filePath}: file too large (${stats.size} bytes, limit: ${this.maxFileSize})\n`);
                     continue;
                 }
 
@@ -98,7 +98,7 @@ export class Packager {
                 const fileTokens = Math.round(content.length / 4);
 
                 if (this.maxTokens && (currentTokens + fileTokens) > this.maxTokens) {
-                    process.stderr.write(`Stopping at ${filePath}: token limit reached (${currentTokens + fileTokens} > ${this.maxTokens})\n`);
+                    process.stderr.write(`🛑 Stopping at ${filePath}: token limit reached (${currentTokens + fileTokens} > ${this.maxTokens})\n`);
                     break;
                 }
                 
