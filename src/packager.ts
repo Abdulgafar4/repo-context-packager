@@ -35,7 +35,19 @@ export class Packager {
 
     public async analyzeRepository(): Promise<void> {
         // For multiple paths, use the first directory or current directory for git info
-        const primaryPath = this.paths.find(p => fs.existsSync(p) && fs.statSync(p).isDirectory()) || this.paths[0] || '.';
+        let primaryPath = this.paths.find(p => fs.existsSync(p) && fs.statSync(p).isDirectory());
+        
+        // If no directory found, use the directory of the first file path
+        if (!primaryPath && this.paths.length > 0) {
+            const firstPath = this.paths[0];
+            if (fs.existsSync(firstPath)) {
+                primaryPath = fs.statSync(firstPath).isFile() ? path.dirname(firstPath) : firstPath;
+            }
+        }
+        
+        // Fall back to current directory
+        primaryPath = primaryPath || '.';
+        
         this.repoInfo.gitInfo = getGitInfo(primaryPath);
         
         const allFilePaths: string[] = [];
