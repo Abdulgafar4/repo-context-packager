@@ -17,6 +17,7 @@ To install the Repository Context Packager, clone the repository and install the
 ```bash
 git clone <repository-url>
 cd repo-context-packager
+npm build
 npm install
 ```
 
@@ -97,4 +98,4 @@ The output will be structured as follows:
 Contributions are welcome! Please open an issue or submit a pull request for any enhancements or bug fixes.
 
 ## License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache License - see the [LICENSE](LICENSE) file for details.
