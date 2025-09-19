@@ -67,7 +67,17 @@ export async function readFileContents(filePath: string): Promise<string> {
             return `[Binary file: ${path.basename(filePath)} (${fs.statSync(filePath).size} bytes)]`;
         }
 
+        const fileName = path.basename(filePath);
         const content = await fs.promises.readFile(filePath, 'utf8');
+        
+        // Extract useful parts from common config files
+        if (fileName === 'package.json') {
+            return extractPackageJsonSummary(content);
+        }
+        
+        if (fileName === 'tsconfig.json') {
+            return extractTsConfigSummary(content);
+        }
         
         // Truncate very large files (>16KB as mentioned in requirements)
         const maxSize = 16 * 1024; // 16KB
@@ -108,4 +118,50 @@ export function truncateContent(content: string, maxLength: number): string {
         return content.substring(0, maxLength) + '... [truncated]';
     }
     return content;
+}
+
+function extractPackageJsonSummary(content: string): string {
+    try {
+        const pkg = JSON.parse(content);
+        
+        const summary = {
+            name: pkg.name,
+            version: pkg.version,
+            description: pkg.description,
+            main: pkg.main,
+            scripts: pkg.scripts,
+            dependencies: pkg.dependencies ? Object.keys(pkg.dependencies) : [],
+            devDependencies: pkg.devDependencies ? Object.keys(pkg.devDependencies) : [],
+            engines: pkg.engines,
+            type: pkg.type
+        };
+        
+        return JSON.stringify(summary, null, 2);
+    } catch (error) {
+        return content; // Return original if parsing fails
+    }
+}
+
+function extractTsConfigSummary(content: string): string {
+    try {
+        const tsConfig = JSON.parse(content);
+        
+        const summary = {
+            compilerOptions: {
+                target: tsConfig.compilerOptions?.target,
+                module: tsConfig.compilerOptions?.module,
+                outDir: tsConfig.compilerOptions?.outDir,
+                rootDir: tsConfig.compilerOptions?.rootDir,
+                strict: tsConfig.compilerOptions?.strict,
+                esModuleInterop: tsConfig.compilerOptions?.esModuleInterop,
+                skipLibCheck: tsConfig.compilerOptions?.skipLibCheck
+            },
+            include: tsConfig.include,
+            exclude: tsConfig.exclude
+        };
+        
+        return JSON.stringify(summary, null, 2);
+    } catch (error) {
+        return content; // Return original if parsing fails
+    }
 }
