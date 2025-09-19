@@ -141,3 +141,7 @@ vite.config.ts.timestamp-*
 # Tool output files
 output.md
 test_*.md
+
+# Package lock files
+package-lock.json
+bun.lockb
