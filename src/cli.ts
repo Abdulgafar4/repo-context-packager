@@ -17,6 +17,7 @@ program
   .option('--max-file-size <size>', 'Limit output to files under specified size (in bytes)')
   .option('--max-tokens <count>', 'Limit total output to specified number of tokens')
   .option('--summary', 'Show function signatures and key info instead of full code')
+  .option('-r, --recent [days]', 'Only include files modified within the last N days (default: 7)')
   .action(async (paths, options) => { // Changed from 'path' to 'paths'
     // Input validation
     if (!paths || paths.length === 0) {
@@ -27,7 +28,7 @@ program
     console.log(chalk.blue.bold('📦 Repository Context Packager'));
     console.log(chalk.gray('━'.repeat(50)));
 
-    const packagerOptions: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number, summary?: boolean } = {};
+    const packagerOptions: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number, summary?: boolean, recent?: number } = {};
     
     if (options.include) {
       packagerOptions.include = options.include.split(',').map((p: string) => p.trim());
@@ -40,6 +41,20 @@ program
     }
     if (options.summary) {
       packagerOptions.summary = options.summary;
+    }
+    if (options.recent !== undefined) {
+      let recentDays: number;
+      if (options.recent === true) {
+        // Flag was used without a value, use default of 7
+        recentDays = 7;
+      } else {
+        recentDays = parseInt(options.recent, 10);
+        if (isNaN(recentDays) || recentDays <= 0) {
+          console.error(chalk.red('❌ Error: --recent must be a positive number'));
+          process.exit(1);
+        }
+      }
+      packagerOptions.recent = recentDays;
     }
     if (options.maxFileSize) {
       const maxFileSize = parseInt(options.maxFileSize, 10);
@@ -81,7 +96,11 @@ program
       await packager.analyzeRepository();
       const repoInfo = packager.getRepoInfo();
       
-      console.log(chalk.green(`✅ Found ${repoInfo.totalFiles} files (${repoInfo.totalLines} total lines)`));
+      if (packagerOptions.recent) {
+        console.log(chalk.green(`✅ Found ${repoInfo.totalFiles} recent files (modified within ${packagerOptions.recent} days) - ${repoInfo.totalLines} total lines`));
+      } else {
+        console.log(chalk.green(`✅ Found ${repoInfo.totalFiles} files (${repoInfo.totalLines} total lines)`));
+      }
       if (packagerOptions.tokens) {
         console.log(chalk.cyan(`🔢 Estimated tokens: ${repoInfo.totalTokens}`));
       }
