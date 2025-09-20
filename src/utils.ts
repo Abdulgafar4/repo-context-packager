@@ -2,7 +2,7 @@ import { glob } from 'glob';
 import fs from 'fs';
 import path from 'path';
 
-export async function collectFiles(repoPath: string, include?: string[], exclude?: string[]): Promise<string[]> {
+export async function collectFiles(repoPath: string, include?: string[], exclude?: string[], recentDays?: number): Promise<string[]> {
     const ignorePatterns = fs.existsSync(path.join(repoPath, '.gitignore'))
         ? fs.readFileSync(path.join(repoPath, '.gitignore'), 'utf-8')
             .split('\n')
@@ -56,6 +56,19 @@ export async function collectFiles(repoPath: string, include?: string[], exclude
         nodir: true,
         ignore: [...defaultIgnore, ...ignorePatterns, ...(exclude || [])],
     });
+
+    // Filter by recent modification date if specified
+    if (recentDays) {
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - recentDays);
+        
+        const recentFiles = files.filter(file => {
+            const fullPath = path.join(repoPath, file);
+            return isFileRecentlyModified(fullPath, recentDays);
+        });
+        
+        return recentFiles;
+    }
 
     return files;
 }
@@ -111,6 +124,22 @@ function isBinaryFile(filePath: string): boolean {
 
 export function formatOutput(content: string): string {
     return `# Output\n\n${content}`;
+}
+
+export function isFileRecentlyModified(filePath: string, days: number): boolean {
+    try {
+        const stats = fs.statSync(filePath);
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - days);
+        
+        // Use the more recent of mtime (modified time) or ctime (change time)
+        const lastModified = new Date(Math.max(stats.mtime.getTime(), stats.ctime.getTime()));
+        
+        return lastModified >= cutoffDate;
+    } catch (error) {
+        // If we can't access the file, consider it not recent
+        return false;
+    }
 }
 
 export function truncateContent(content: string, maxLength: number): string {

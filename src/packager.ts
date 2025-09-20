@@ -14,8 +14,9 @@ export class Packager {
     private maxFileSize?: number;
     private maxTokens?: number;
     private summary: boolean;
+    private recent?: number;
 
-    constructor(paths: string | string[], options: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number, summary?: boolean } = {}) {
+    constructor(paths: string | string[], options: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number, summary?: boolean, recent?: number } = {}) {
         // Handle both single path and array of paths
         this.paths = Array.isArray(paths) ? paths : [paths];
         this.include = options.include;
@@ -24,6 +25,7 @@ export class Packager {
         this.maxFileSize = options.maxFileSize;
         this.maxTokens = options.maxTokens;
         this.summary = options.summary || false;
+        this.recent = options.recent;
         this.repoInfo = {
             gitInfo: null,
             files: [],
@@ -75,7 +77,7 @@ export class Packager {
                     // Check if directory is readable
                     try {
                         fs.accessSync(singlePath, fs.constants.R_OK);
-                        const dirFiles = await collectFiles(singlePath, this.include, this.exclude);
+                        const dirFiles = await collectFiles(singlePath, this.include, this.exclude, this.recent);
                         allFilePaths.push(...dirFiles.map(f => path.join(singlePath, f)));
                     } catch (accessError) {
                         process.stderr.write(`Error: Cannot read directory '${singlePath}': Permission denied\n`);
@@ -93,7 +95,10 @@ export class Packager {
 
         for (const filePath of allFilePaths) {
             try {
-                const fullPath = path.isAbsolute(filePath) ? filePath : path.join(primaryPath, filePath);
+                // For files collected from directories, they are already properly joined with the directory path
+                // For individual files passed as arguments, they might need to be resolved relative to primaryPath
+                const fullPath = path.isAbsolute(filePath) ? filePath : 
+                    (filePath.startsWith(primaryPath) ? filePath : path.join(primaryPath, filePath));
                 
                 // Check if file still exists (could have been deleted between collection and processing)
                 if (!fs.existsSync(fullPath)) {
@@ -173,6 +178,12 @@ export class Packager {
             output += `## Git Info\n\nNot a git repository\n\n`;
         }
 
+        // Add Recent Changes section if recent filter is active
+        if (this.recent) {
+            output += `## Recent Changes\n\n`;
+            output += `Showing files modified within the last ${this.recent} day${this.recent === 1 ? '' : 's'}.\n\n`;
+        }
+
         output += `## Structure\n\n`;
         output += '```\n';
         output += this.generateFileTree();
@@ -197,6 +208,9 @@ export class Packager {
         output += `## Summary\n`;
         output += `- Total files: ${this.repoInfo.totalFiles}\n`;
         output += `- Total lines: ${this.repoInfo.totalLines}\n`;
+        if (this.recent) {
+            output += `- Recent filter: Last ${this.recent} day${this.recent === 1 ? '' : 's'}\n`;
+        }
         if (this.tokens) {
             output += `- Estimated tokens: ${this.repoInfo.totalTokens}\n`;
         }
