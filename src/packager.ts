@@ -50,7 +50,7 @@ export class Packager {
         // Fall back to current directory
         primaryPath = primaryPath || '.';
         
-        this.repoInfo.gitInfo = getGitInfo(primaryPath);
+        this.repoInfo.gitInfo = await getGitInfo(primaryPath);
         
         const allFilePaths: string[] = [];
         

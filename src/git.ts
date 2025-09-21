@@ -1,5 +1,6 @@
-import { execSync } from 'child_process';
+import { simpleGit } from 'simple-git';
 import path from 'path';
+import fs from 'fs';
 
 export interface GitInfo {
     commit: string;
@@ -8,40 +9,40 @@ export interface GitInfo {
     date: string;
 }
 
-export function getGitInfo(repoPath?: string): GitInfo | null {
+export async function getGitInfo(repoPath?: string): Promise<GitInfo | null> {
     try {
         const resolvedPath = repoPath ? path.resolve(repoPath) : process.cwd();
         
         // Check if directory exists
-        if (repoPath && !require('fs').existsSync(resolvedPath)) {
-            process.stderr.write(`Warning: Directory '${repoPath}' does not exist.\n`);
+        if (repoPath && !fs.existsSync(resolvedPath)) {
             return null;
         }
         
-        const options = { cwd: resolvedPath, stdio: 'pipe' as const };
+        // Initialize simple-git with the repository path
+        const git = simpleGit(resolvedPath);
         
-        // Check if it's a git repository first
-        try {
-            execSync('git rev-parse --git-dir', options);
-        } catch {
-            process.stderr.write(`Warning: '${resolvedPath}' is not a git repository.\n`);
+        // Check if it's a git repository
+        const isRepo = await git.checkIsRepo();
+        if (!isRepo) {
             return null;
         }
         
-        const commit = execSync('git rev-parse HEAD', options).toString().trim();
-        const branch = execSync('git rev-parse --abbrev-ref HEAD', options).toString().trim();
-        const author = execSync('git log -1 --pretty=format:\'%an <%ae>\'', options).toString().trim();
-        const date = execSync('git log -1 --format=%cd', options).toString().trim();
-
-        return { commit, branch, author, date };
-    } catch (error: any) {
-        if (error.message.includes('not a git repository')) {
-            process.stderr.write('Warning: Not a git repository.\n');
-        } else if (error.message.includes('bad revision')) {
-            process.stderr.write('Warning: Git repository has no commits.\n');
-        } else {
-            process.stderr.write(`Warning: Unable to retrieve git information: ${error.message}\n`);
+        // Get the latest commit log
+        const log = await git.log(['-1']);
+        if (!log.latest) {
+            return null;
         }
+        
+        // Get branch
+        const branch = await git.branch();
+        
+        return {
+            commit: log.latest.hash,
+            branch: branch.current,
+            author: `${log.latest.author_name} <${log.latest.author_email}>`,
+            date: log.latest.date
+        };
+    } catch (error) {
         return null;
     }
 }
