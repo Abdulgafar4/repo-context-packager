@@ -15,8 +15,9 @@ export class Packager {
     private maxTokens?: number;
     private summary: boolean;
     private recent?: number;
+    private verbose: boolean;
 
-    constructor(paths: string | string[], options: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number, summary?: boolean, recent?: number } = {}) {
+    constructor(paths: string | string[], options: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number, summary?: boolean, recent?: number, verbose?: boolean } = {}) {
         // Handle both single path and array of paths
         this.paths = Array.isArray(paths) ? paths : [paths];
         this.include = options.include;
@@ -26,6 +27,7 @@ export class Packager {
         this.maxTokens = options.maxTokens;
         this.summary = options.summary || false;
         this.recent = options.recent;
+        this.verbose = options.verbose || false;
         this.repoInfo = {
             gitInfo: null,
             files: [],
@@ -50,12 +52,19 @@ export class Packager {
         // Fall back to current directory
         primaryPath = primaryPath || '.';
         
+        if (this.verbose) {
+            process.stderr.write(`Processing primary path: ${primaryPath}\n`);
+        }
+        
         this.repoInfo.gitInfo = getGitInfo(primaryPath);
         
         const allFilePaths: string[] = [];
         
         // Collect files from all paths
         for (const singlePath of this.paths) {
+            if (this.verbose) {
+                process.stderr.write(`Processing path: ${singlePath}\n`);
+            }
             try {
                 if (!fs.existsSync(singlePath)) {
                     process.stderr.write(`Error: Path '${singlePath}' does not exist\n`);
@@ -69,6 +78,9 @@ export class Packager {
                     try {
                         fs.accessSync(singlePath, fs.constants.R_OK);
                         const relativePath = path.relative(primaryPath, singlePath) || singlePath;
+                        if (this.verbose) {
+                            process.stderr.write(`Adding file: ${relativePath}\n`);
+                        }
                         allFilePaths.push(relativePath);
                     } catch (accessError) {
                         process.stderr.write(`Error: Cannot read file '${singlePath}': Permission denied\n`);
@@ -77,7 +89,13 @@ export class Packager {
                     // Check if directory is readable
                     try {
                         fs.accessSync(singlePath, fs.constants.R_OK);
+                        if (this.verbose) {
+                            process.stderr.write(`Scanning directory: ${singlePath}\n`);
+                        }
                         const dirFiles = await collectFiles(singlePath, this.include, this.exclude, this.recent);
+                        if (this.verbose) {
+                            process.stderr.write(`Found ${dirFiles.length} files in directory: ${singlePath}\n`);
+                        }
                         allFilePaths.push(...dirFiles.map(f => path.join(singlePath, f)));
                     } catch (accessError) {
                         process.stderr.write(`Error: Cannot read directory '${singlePath}': Permission denied\n`);
@@ -93,7 +111,14 @@ export class Packager {
         const fileInfos: FileInfo[] = [];
         let currentTokens = 0;
 
+        if (this.verbose) {
+            process.stderr.write(`Processing ${allFilePaths.length} files...\n`);
+        }
+        
         for (const filePath of allFilePaths) {
+            if (this.verbose) {
+                process.stderr.write(`Reading file: ${filePath}\n`);
+            }
             try {
                 // For files collected from directories, they are already properly joined with the directory path
                 // For individual files passed as arguments, they might need to be resolved relative to primaryPath
@@ -109,7 +134,9 @@ export class Packager {
                 const stats = await fs.promises.stat(fullPath);
 
                 if (this.maxFileSize && stats.size > this.maxFileSize) {
-                    process.stderr.write(`⚠️  Skipping ${filePath}: file too large (${stats.size} bytes, limit: ${this.maxFileSize})\n`);
+                    if (this.verbose) {
+                        process.stderr.write(`Skipping ${filePath}: file too large (${stats.size} bytes, limit: ${this.maxFileSize})\n`);
+                    }
                     continue;
                 }
 
@@ -118,7 +145,9 @@ export class Packager {
                 const fileTokens = Math.round(content.length / 4);
 
                 if (this.maxTokens && (currentTokens + fileTokens) > this.maxTokens) {
-                    process.stderr.write(`🛑 Stopping at ${filePath}: token limit reached (${currentTokens + fileTokens} > ${this.maxTokens})\n`);
+                    if (this.verbose) {
+                        process.stderr.write(`Stopping at ${filePath}: token limit reached (${currentTokens + fileTokens} > ${this.maxTokens})\n`);
+                    }
                     break;
                 }
                 

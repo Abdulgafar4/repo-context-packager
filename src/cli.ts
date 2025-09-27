@@ -18,6 +18,7 @@ program
   .option('--max-tokens <count>', 'Limit total output to specified number of tokens')
   .option('--summary', 'Show function signatures and key info instead of full code')
   .option('-r, --recent [days]', 'Only include files modified within the last N days (default: 7)')
+  .option('-v, --verbose', 'Print detailed progress information to stderr')
   .action(async (paths, options) => { // Changed from 'path' to 'paths'
     // Input validation
     if (!paths || paths.length === 0) {
@@ -28,7 +29,7 @@ program
     console.log(chalk.blue.bold('📦 Repository Context Packager'));
     console.log(chalk.gray('━'.repeat(50)));
 
-    const packagerOptions: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number, summary?: boolean, recent?: number } = {};
+    const packagerOptions: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number, summary?: boolean, recent?: number, verbose?: boolean } = {};
     
     if (options.include) {
       packagerOptions.include = options.include.split(',').map((p: string) => p.trim());
@@ -71,6 +72,9 @@ program
         process.exit(1);
       }
       packagerOptions.maxTokens = maxTokens;
+    }
+    if (options.verbose) {
+      packagerOptions.verbose = options.verbose;
     }
 
     // Set default output file if not specified
