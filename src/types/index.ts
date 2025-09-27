@@ -18,4 +18,9 @@ export interface RepoInfo {
     totalFiles: number;
     totalLines: number;
     totalTokens: number;
+    totalCharacters: number;
+    directoriesProcessed: number;
+    fileTypes: Record<string, number>;
+    largestFile: { path: string; lines: number } | null;
+    averageFileSize: number;
 }
