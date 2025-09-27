@@ -32,6 +32,11 @@ export class Packager {
             totalFiles: 0,
             totalLines: 0,
             totalTokens: 0,
+            totalCharacters: 0,
+            directoriesProcessed: 0,
+            fileTypes: {},
+            largestFile: null,
+            averageFileSize: 0,
         };
     }
 
@@ -92,6 +97,10 @@ export class Packager {
         
         const fileInfos: FileInfo[] = [];
         let currentTokens = 0;
+        const fileTypes: Record<string, number> = {};
+        let largestFile: { path: string; lines: number } | null = null;
+        let totalCharacters = 0;
+        const processedDirectories = new Set<string>();
 
         for (const filePath of allFilePaths) {
             try {
@@ -123,6 +132,25 @@ export class Packager {
                 }
                 
                 currentTokens += fileTokens;
+                
+                // Collect statistics
+                totalCharacters += content.length;
+                
+                // Track file types
+                const fileExtension = path.extname(filePath).toLowerCase() || '.txt';
+                fileTypes[fileExtension] = (fileTypes[fileExtension] || 0) + 1;
+                
+                // Track largest file
+                if (!largestFile || lines > largestFile.lines) {
+                    largestFile = { path: filePath, lines };
+                }
+                
+                // Track directories
+                const directory = path.dirname(filePath);
+                if (directory !== '.' && directory !== '') {
+                    processedDirectories.add(directory);
+                }
+                
                 fileInfos.push({ 
                     path: filePath, 
                     content, 
@@ -146,6 +174,12 @@ export class Packager {
         this.repoInfo.totalFiles = this.repoInfo.files.length;
         this.repoInfo.totalLines = this.calculateTotalLines(this.repoInfo.files);
         this.repoInfo.totalTokens = this.calculateTotalTokens(this.repoInfo.files);
+        this.repoInfo.totalCharacters = totalCharacters;
+        this.repoInfo.directoriesProcessed = processedDirectories.size;
+        this.repoInfo.fileTypes = fileTypes;
+        this.repoInfo.largestFile = largestFile;
+        this.repoInfo.averageFileSize = this.repoInfo.totalFiles > 0 ? 
+            Math.round(this.repoInfo.totalLines / this.repoInfo.totalFiles) : 0;
     }
 
     // Make sure these methods exist and are properly defined
@@ -208,6 +242,24 @@ export class Packager {
         output += `## Summary\n`;
         output += `- Total files: ${this.repoInfo.totalFiles}\n`;
         output += `- Total lines: ${this.repoInfo.totalLines}\n`;
+        
+        // Enhanced statistics
+        const fileTypesEntries = Object.entries(this.repoInfo.fileTypes)
+            .sort(([,a], [,b]) => b - a)
+            .map(([ext, count]) => `${ext} (${count})`)
+            .join(', ');
+        if (fileTypesEntries) {
+            output += `- File types: ${fileTypesEntries}\n`;
+        }
+        
+        if (this.repoInfo.largestFile) {
+            output += `- Largest file: ${this.repoInfo.largestFile.path} (${this.repoInfo.largestFile.lines} lines)\n`;
+        }
+        
+        output += `- Average file size: ${this.repoInfo.averageFileSize} lines\n`;
+        output += `- Total characters: ${this.repoInfo.totalCharacters.toLocaleString()}\n`;
+        output += `- Directories processed: ${this.repoInfo.directoriesProcessed}\n`;
+        
         if (this.recent) {
             output += `- Recent filter: Last ${this.recent} day${this.recent === 1 ? '' : 's'}\n`;
         }
