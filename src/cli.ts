@@ -3,8 +3,26 @@ import { Packager } from './packager';
 import fs from 'fs';
 import chalk from 'chalk';
 import path from 'path';
+import { loadConfig,ConfigOptions } from './config';
+
 
 const program = new Command();
+
+function applyConfigDefaults(cliOptions: any): any{
+  const configDefaults = loadConfig();
+
+  return{
+   output: cliOptions.output || configDefaults.output,
+   include: cliOptions.include || configDefaults.include,
+   exclude: cliOptions.exclude || configDefaults.exclude,
+   tokens : cliOptions.tokens ?? configDefaults.tokens,
+   summary: cliOptions.summary ?? configDefaults.summary,
+   verbose: cliOptions.verbose ?? configDefaults.verbose,
+   maxFileSize: cliOptions.maxFileSize || configDefaults.maxFileSize,
+   maxTokens: cliOptions.maxTokens || configDefaults.maxTokens,
+   recent: cliOptions.recent !== undefined ? cliOptions.recent : configDefaults.recent
+  };
+}
 
 program
   .version('1.0.0')
@@ -28,6 +46,8 @@ program
 
     console.log(chalk.blue.bold('📦 Repository Context Packager'));
     console.log(chalk.gray('━'.repeat(50)));
+
+    options = applyConfigDefaults(options);
 
     const packagerOptions: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number, summary?: boolean, recent?: number, verbose?: boolean } = {};
     
