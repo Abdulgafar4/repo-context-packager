@@ -16,6 +16,7 @@ The Repository Context Packager is a command-line tool designed to analyze local
 - **Smart filtering**: Automatically excludes unnecessary files (node_modules, lock files, documentation)
 - **Multi-language support**: TypeScript, JavaScript, Python, and more
 - **Token estimation**: Calculate LLM token usage for better context management
+- **Configuration File**: Set default options instead of writing every feature
 
 ## Installation
 To install the Repository Context Packager, clone the repository and install the dependencies:
@@ -74,7 +75,17 @@ npm start . --summary
 ```bash
 npm start . --summary --tokens
 ```
+## Configuration File
 
+You can create a `.repoPackager.toml` file in your project root to set default options:
+```toml
+# Example configuration
+output = "my-output.md"
+verbose = false
+tokens = true
+exclude = "*.test.ts,*.spec.ts"
+maxFileSize = 5000
+```
 ## Output Modes
 
 ### Full Mode (Default)
