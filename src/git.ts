@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
 import path from 'path';
+import { logWarning } from './logger';
 
 export interface GitInfo {
     commit: string;
@@ -14,7 +15,7 @@ export function getGitInfo(repoPath?: string): GitInfo | null {
         
         // Check if directory exists
         if (repoPath && !require('fs').existsSync(resolvedPath)) {
-            process.stderr.write(`Warning: Directory '${repoPath}' does not exist.\n`);
+            logWarning(`Directory '${repoPath}' does not exist.`);
             return null;
         }
         
@@ -24,7 +25,7 @@ export function getGitInfo(repoPath?: string): GitInfo | null {
         try {
             execSync('git rev-parse --git-dir', options);
         } catch {
-            process.stderr.write(`Warning: '${resolvedPath}' is not a git repository.\n`);
+            logWarning(`'${resolvedPath}' is not a git repository.`);
             return null;
         }
         
@@ -36,11 +37,11 @@ export function getGitInfo(repoPath?: string): GitInfo | null {
         return { commit, branch, author, date };
     } catch (error: any) {
         if (error.message.includes('not a git repository')) {
-            process.stderr.write('Warning: Not a git repository.\n');
+            logWarning('Not a git repository.');
         } else if (error.message.includes('bad revision')) {
-            process.stderr.write('Warning: Git repository has no commits.\n');
+            logWarning('Git repository has no commits.');
         } else {
-            process.stderr.write(`Warning: Unable to retrieve git information: ${error.message}\n`);
+            logWarning(`Unable to retrieve git information: ${error.message}`);
         }
         return null;
     }

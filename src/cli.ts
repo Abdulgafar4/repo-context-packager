@@ -3,25 +3,141 @@ import { Packager } from './packager';
 import fs from 'fs';
 import chalk from 'chalk';
 import path from 'path';
-import { loadConfig,ConfigOptions } from './config';
-
+import { loadConfig, ConfigOptions } from './config';
+import { Logger } from './logger';
 
 const program = new Command();
 
-function applyConfigDefaults(cliOptions: any): any{
-  const configDefaults = loadConfig();
+interface PackagerOptions {
+    include?: string[];
+    exclude?: string[];
+    tokens?: boolean;
+    maxFileSize?: number;
+    maxTokens?: number;
+    summary?: boolean;
+    recent?: number;
+    verbose?: boolean;
+}
 
-  return{
-   output: cliOptions.output || configDefaults.output,
-   include: cliOptions.include || configDefaults.include,
-   exclude: cliOptions.exclude || configDefaults.exclude,
-   tokens : cliOptions.tokens ?? configDefaults.tokens,
-   summary: cliOptions.summary ?? configDefaults.summary,
-   verbose: cliOptions.verbose ?? configDefaults.verbose,
-   maxFileSize: cliOptions.maxFileSize || configDefaults.maxFileSize,
-   maxTokens: cliOptions.maxTokens || configDefaults.maxTokens,
-   recent: cliOptions.recent !== undefined ? cliOptions.recent : configDefaults.recent
-  };
+function parsePackagerOptions(options: any): PackagerOptions {
+    const packagerOptions: PackagerOptions = {};
+    
+    if (options.include) {
+        packagerOptions.include = options.include.split(',').map((p: string) => p.trim());
+    }
+    if (options.exclude) {
+        packagerOptions.exclude = options.exclude.split(',').map((p: string) => p.trim());
+    }
+    if (options.tokens) {
+        packagerOptions.tokens = options.tokens;
+    }
+    if (options.summary) {
+        packagerOptions.summary = options.summary;
+    }
+    if (options.recent !== undefined) {
+        packagerOptions.recent = validateRecentOption(options.recent);
+    }
+    if (options.maxFileSize) {
+        packagerOptions.maxFileSize = validatePositiveNumber(options.maxFileSize, '--max-file-size');
+    }
+    if (options.maxTokens) {
+        packagerOptions.maxTokens = validatePositiveNumber(options.maxTokens, '--max-tokens');
+    }
+    if (options.verbose) {
+        packagerOptions.verbose = options.verbose;
+    }
+    
+    return packagerOptions;
+}
+
+function validateRecentOption(recent: any): number {
+    if (recent === true) {
+        // Flag was used without a value, use default of 7
+        return 7;
+    }
+    const recentDays = parseInt(recent, 10);
+    if (isNaN(recentDays) || recentDays <= 0) {
+        Logger.error('--recent must be a positive number');
+        process.exit(1);
+    }
+    return recentDays;
+}
+
+function validatePositiveNumber(value: string, optionName: string): number {
+    const num = parseInt(value, 10);
+    if (isNaN(num) || num <= 0) {
+        Logger.error(`${optionName} must be a positive number`);
+        process.exit(1);
+    }
+    return num;
+}
+
+function validateOutputPath(outputFile: string): void {
+    try {
+        const outputDir = path.dirname(outputFile);
+        if (outputDir !== '.' && !fs.existsSync(outputDir)) {
+            Logger.error(`Output directory '${outputDir}' does not exist`);
+            process.exit(1);
+        }
+    } catch (error) {
+        Logger.error(`Invalid output path '${outputFile}'`);
+        process.exit(1);
+    }
+}
+
+function applyConfigDefaults(cliOptions: any): any {
+    const configDefaults = loadConfig();
+
+    return {
+        output: cliOptions.output || configDefaults.output,
+        include: cliOptions.include || configDefaults.include,
+        exclude: cliOptions.exclude || configDefaults.exclude,
+        tokens: cliOptions.tokens ?? configDefaults.tokens,
+        summary: cliOptions.summary ?? configDefaults.summary,
+        verbose: cliOptions.verbose ?? configDefaults.verbose,
+        maxFileSize: cliOptions.maxFileSize || configDefaults.maxFileSize,
+        maxTokens: cliOptions.maxTokens || configDefaults.maxTokens,
+        recent: cliOptions.recent !== undefined ? cliOptions.recent : configDefaults.recent
+    };
+}
+
+function displayAnalysisResults(repoInfo: any, packagerOptions: PackagerOptions): void {
+    if (packagerOptions.recent) {
+        Logger.success(`✅ Found ${repoInfo.totalFiles} recent files (modified within ${packagerOptions.recent} days) - ${repoInfo.totalLines} total lines`);
+    } else {
+        Logger.success(`✅ Found ${repoInfo.totalFiles} files (${repoInfo.totalLines} total lines)`);
+    }
+    if (packagerOptions.tokens) {
+        Logger.cyan(`🔢 Estimated tokens: ${repoInfo.totalTokens}`);
+    }
+}
+
+function displaySuccessMessage(outputFile: string, showTip: boolean): void {
+    Logger.separator();
+    Logger.success('🎉 Success! Repository context packaged to:');
+    Logger.highlight(path.resolve(outputFile));
+    
+    const stats = fs.statSync(outputFile);
+    Logger.dim(`📄 Output file size: ${(stats.size / 1024).toFixed(2)} KB`);
+    
+    if (showTip) {
+        Logger.dim('💡 Tip: Use -o <filename> to specify a custom output file');
+    }
+}
+
+async function executePackaging(paths: string[], packagerOptions: PackagerOptions, outputFile: string): Promise<void> {
+    Logger.info('🔍 Analyzing repository...');
+    
+    const packager = new Packager(paths, packagerOptions);
+    await packager.analyzeRepository();
+    const repoInfo = packager.getRepoInfo();
+    
+    displayAnalysisResults(repoInfo, packagerOptions);
+    
+    Logger.info('📝 Generating package...');
+    const output = packager.generatePackage();
+
+    await fs.promises.writeFile(outputFile, output);
 }
 
 program
@@ -37,116 +153,28 @@ program
   .option('--summary', 'Show function signatures and key info instead of full code')
   .option('-r, --recent [days]', 'Only include files modified within the last N days (default: 7)')
   .option('-v, --verbose', 'Print detailed progress information to stderr')
-  .action(async (paths, options) => { // Changed from 'path' to 'paths'
+  .action(async (paths, options) => {
     // Input validation
     if (!paths || paths.length === 0) {
-      console.error(chalk.red('❌ Error: No paths provided. Please specify at least one file or directory path.'));
+      Logger.error('No paths provided. Please specify at least one file or directory path.');
       process.exit(1);
     }
 
-    console.log(chalk.blue.bold('📦 Repository Context Packager'));
-    console.log(chalk.gray('━'.repeat(50)));
+    Logger.header('📦 Repository Context Packager');
 
+    // Apply config defaults and parse options
     options = applyConfigDefaults(options);
+    const packagerOptions = parsePackagerOptions(options);
 
-    const packagerOptions: { include?: string[], exclude?: string[], tokens?: boolean, maxFileSize?: number, maxTokens?: number, summary?: boolean, recent?: number, verbose?: boolean } = {};
-    
-    if (options.include) {
-      packagerOptions.include = options.include.split(',').map((p: string) => p.trim());
-    }
-    if (options.exclude) {
-      packagerOptions.exclude = options.exclude.split(',').map((p: string) => p.trim());
-    }
-    if (options.tokens) {
-      packagerOptions.tokens = options.tokens;
-    }
-    if (options.summary) {
-      packagerOptions.summary = options.summary;
-    }
-    if (options.recent !== undefined) {
-      let recentDays: number;
-      if (options.recent === true) {
-        // Flag was used without a value, use default of 7
-        recentDays = 7;
-      } else {
-        recentDays = parseInt(options.recent, 10);
-        if (isNaN(recentDays) || recentDays <= 0) {
-          console.error(chalk.red('❌ Error: --recent must be a positive number'));
-          process.exit(1);
-        }
-      }
-      packagerOptions.recent = recentDays;
-    }
-    if (options.maxFileSize) {
-      const maxFileSize = parseInt(options.maxFileSize, 10);
-      if (isNaN(maxFileSize) || maxFileSize <= 0) {
-        console.error(chalk.red('❌ Error: --max-file-size must be a positive number'));
-        process.exit(1);
-      }
-      packagerOptions.maxFileSize = maxFileSize;
-    }
-    if (options.maxTokens) {
-      const maxTokens = parseInt(options.maxTokens, 10);
-      if (isNaN(maxTokens) || maxTokens <= 0) {
-        console.error(chalk.red('❌ Error: --max-tokens must be a positive number'));
-        process.exit(1);
-      }
-      packagerOptions.maxTokens = maxTokens;
-    }
-    if (options.verbose) {
-      packagerOptions.verbose = options.verbose;
-    }
-
-    // Set default output file if not specified
+    // Set default output file and validate
     const outputFile = options.output || 'output.md';
-    
-    // Validate output file path
-    try {
-      const outputDir = path.dirname(outputFile);
-      if (outputDir !== '.' && !fs.existsSync(outputDir)) {
-        console.error(chalk.red(`❌ Error: Output directory '${outputDir}' does not exist`));
-        process.exit(1);
-      }
-    } catch (error) {
-      console.error(chalk.red(`❌ Error: Invalid output path '${outputFile}'`));
-      process.exit(1);
-    }
+    validateOutputPath(outputFile);
 
     try {
-      console.log(chalk.yellow('🔍 Analyzing repository...'));
-      
-      // Handle multiple paths
-      const packager = new Packager(paths, packagerOptions);
-      await packager.analyzeRepository();
-      const repoInfo = packager.getRepoInfo();
-      
-      if (packagerOptions.recent) {
-        console.log(chalk.green(`✅ Found ${repoInfo.totalFiles} recent files (modified within ${packagerOptions.recent} days) - ${repoInfo.totalLines} total lines`));
-      } else {
-        console.log(chalk.green(`✅ Found ${repoInfo.totalFiles} files (${repoInfo.totalLines} total lines)`));
-      }
-      if (packagerOptions.tokens) {
-        console.log(chalk.cyan(`🔢 Estimated tokens: ${repoInfo.totalTokens}`));
-      }
-      
-      console.log(chalk.yellow('📝 Generating package...'));
-      const output = packager.generatePackage();
-
-      await fs.promises.writeFile(outputFile, output);
-      
-      console.log(chalk.gray('━'.repeat(50)));
-      console.log(chalk.green.bold(`🎉 Success! Repository context packaged to:`));
-      console.log(chalk.blue.underline(path.resolve(outputFile)));
-      
-      const stats = fs.statSync(outputFile);
-      console.log(chalk.gray(`📄 Output file size: ${(stats.size / 1024).toFixed(2)} KB`));
-      
-      if (!options.output) {
-        console.log(chalk.gray(`💡 Tip: Use -o <filename> to specify a custom output file`));
-      }
-      
+      await executePackaging(paths, packagerOptions, outputFile);
+      displaySuccessMessage(outputFile, !options.output);
     } catch (error) {
-      console.error(chalk.red(`❌ Error: ${(error as Error).message}`));
+      Logger.error((error as Error).message);
       process.exit(1);
     }
   });

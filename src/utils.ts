@@ -2,6 +2,47 @@ import { glob } from 'glob';
 import fs from 'fs';
 import path from 'path';
 
+// Default patterns to ignore when collecting files
+const DEFAULT_IGNORE_PATTERNS = [
+    'node_modules/**', 
+    '.git/**', 
+    '*.log', 
+    'dist/**', 
+    'build/**',
+    'output.md',
+    '*.lock',
+    'package-lock.json',
+    'yarn.lock',
+    'pnpm-lock.yaml',
+    'bun.lockb',
+    'README.md',
+    'readme.md',
+    'Instruction.md',
+    'instruction.md',
+    'INSTRUCTIONS.md',
+    'LICENSE',
+    'license',
+    'LICENSE.txt',
+    'CHANGELOG.md',
+    'changelog.md',
+    '.gitignore',
+    '.gitattributes',
+    '.env*',
+    '*.env',
+    '.DS_Store',
+    'Thumbs.db',
+    '*.tmp',
+    '*.temp',
+    '*.cache',
+    'coverage/**',
+    '.nyc_output/**',
+    '.vscode/**',
+    '.idea/**',
+    '*.swp',
+    '*.swo',
+    '*~'
+];
+
 export async function collectFiles(repoPath: string, include?: string[], exclude?: string[], recentDays?: number): Promise<string[]> {
     const ignorePatterns = fs.existsSync(path.join(repoPath, '.gitignore'))
         ? fs.readFileSync(path.join(repoPath, '.gitignore'), 'utf-8')
@@ -11,50 +52,11 @@ export async function collectFiles(repoPath: string, include?: string[], exclude
         : [];
 
     const patterns = include && include.length > 0 ? include : ['**/*'];
-    const defaultIgnore = [
-        'node_modules/**', 
-        '.git/**', 
-        '*.log', 
-        'dist/**', 
-        'build/**',
-        'output.md',
-        '*.lock',
-        'package-lock.json',
-        'yarn.lock',
-        'pnpm-lock.yaml',
-        'bun.lockb',
-        'README.md',
-        'readme.md',
-        'Instruction.md',
-        'instruction.md',
-        'INSTRUCTIONS.md',
-        'LICENSE',
-        'license',
-        'LICENSE.txt',
-        'CHANGELOG.md',
-        'changelog.md',
-        '.gitignore',
-        '.gitattributes',
-        '.env*',
-        '*.env',
-        '.DS_Store',
-        'Thumbs.db',
-        '*.tmp',
-        '*.temp',
-        '*.cache',
-        'coverage/**',
-        '.nyc_output/**',
-        '.vscode/**',
-        '.idea/**',
-        '*.swp',
-        '*.swo',
-        '*~'
-    ];
     
     const files = await glob(patterns, {
         cwd: repoPath,
         nodir: true,
-        ignore: [...defaultIgnore, ...ignorePatterns, ...(exclude || [])],
+        ignore: [...DEFAULT_IGNORE_PATTERNS, ...ignorePatterns, ...(exclude || [])],
     });
 
     // Filter by recent modification date if specified
@@ -147,6 +149,11 @@ export function truncateContent(content: string, maxLength: number): string {
         return content.substring(0, maxLength) + '... [truncated]';
     }
     return content;
+}
+
+export function calculateTokens(content: string): number {
+    // Rough estimate: 1 token ≈ 4 characters
+    return Math.round(content.length / 4);
 }
 
 function extractPackageJsonSummary(content: string): string {
