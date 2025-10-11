@@ -4,8 +4,18 @@ import { RepoInfo, FileInfo } from './types';
 import { getGitInfo } from './git';
 import { collectFiles, readFileContents, calculateTokens } from './utils';
 import { summarizeCode, formatSummary } from './summarizer';
-import { RepositoryStatistics, calculateTotalLines, calculateTotalTokens } from './statistics';
-import { logVerbose, logWarning } from './logger';
+import { RepositoryStatistics } from './statistics';
+import { 
+    logVerbose, 
+    logError, 
+    logWarning, 
+    logFileError,
+    logProcessingPath,
+    logScanningDirectory,
+    logFilesFound,
+    logProcessingFile,
+    logSkippedFile
+} from './logger';
 
 export class Packager {
     private paths: string[];
@@ -67,10 +77,11 @@ export class Packager {
         
         // Collect files from all paths
         for (const singlePath of this.paths) {
-            logVerbose(`Processing path: ${singlePath}`, this.verbose);
+            logProcessingPath(singlePath, this.verbose);
+            
             try {
                 if (!fs.existsSync(singlePath)) {
-                    logWarning(`Path '${singlePath}' does not exist`);
+                    logError(`Path '${singlePath}' does not exist`);
                     continue;
                 }
                 
@@ -84,35 +95,35 @@ export class Packager {
                         logVerbose(`Adding file: ${relativePath}`, this.verbose);
                         allFilePaths.push(relativePath);
                     } catch (accessError) {
-                        logWarning(`Cannot read file '${singlePath}': Permission denied`);
+                        logError(`Cannot read file '${singlePath}': Permission denied`);
                     }
                 } else if (stat.isDirectory()) {
                     // Check if directory is readable
                     try {
                         fs.accessSync(singlePath, fs.constants.R_OK);
-                        logVerbose(`Scanning directory: ${singlePath}`, this.verbose);
+                        logScanningDirectory(singlePath, this.verbose);
                         const dirFiles = await collectFiles(singlePath, this.include, this.exclude, this.recent);
-                        logVerbose(`Found ${dirFiles.length} files in directory: ${singlePath}`, this.verbose);
+                        logFilesFound(dirFiles.length, singlePath, this.verbose);
                         allFilePaths.push(...dirFiles.map(f => path.join(singlePath, f)));
                     } catch (accessError) {
-                        logWarning(`Cannot read directory '${singlePath}': Permission denied`);
+                        logError(`Cannot read directory '${singlePath}': Permission denied`);
                     }
                 } else {
                     logWarning(`'${singlePath}' is neither a file nor a directory`);
                 }
             } catch (error: any) {
-                logWarning(`Cannot access '${singlePath}': ${error.message}`);
+                logError(`Cannot access '${singlePath}': ${error.message}`);
             }
         }
         
         const fileInfos: FileInfo[] = [];
-        let currentTokens = 0;
-        const statistics = new RepositoryStatistics();
+        const stats = new RepositoryStatistics();
 
         logVerbose(`Processing ${allFilePaths.length} files...`, this.verbose);
         
         for (const filePath of allFilePaths) {
-            logVerbose(`Reading file: ${filePath}`, this.verbose);
+            logProcessingFile(filePath, this.verbose);
+            
             try {
                 // For files collected from directories, they are already properly joined with the directory path
                 // For individual files passed as arguments, they might need to be resolved relative to primaryPath
@@ -125,56 +136,58 @@ export class Packager {
                     continue;
                 }
                 
-                const stats = await fs.promises.stat(fullPath);
+                const fileStats = await fs.promises.stat(fullPath);
 
-                if (this.maxFileSize && stats.size > this.maxFileSize) {
-                    logVerbose(`Skipping ${filePath}: file too large (${stats.size} bytes, limit: ${this.maxFileSize})`, this.verbose);
+                if (this.maxFileSize && fileStats.size > this.maxFileSize) {
+                    logSkippedFile(filePath, `file too large (${fileStats.size} bytes, limit: ${this.maxFileSize})`, this.verbose);
                     continue;
                 }
 
                 const content = await readFileContents(fullPath);
                 const lines = content.split('\n').length;
-                const fileTokens = calculateTokens(content);
 
-                if (this.maxTokens && (currentTokens + fileTokens) > this.maxTokens) {
-                    logVerbose(`Stopping at ${filePath}: token limit reached (${currentTokens + fileTokens} > ${this.maxTokens})`, this.verbose);
+                // Check token limit before processing
+                if (stats.wouldExceedTokenLimit(content, this.maxTokens)) {
+                    const fileTokens = calculateTokens(content);
+                    logVerbose(`Stopping at ${filePath}: token limit reached (${stats.getCurrentTokens() + fileTokens} > ${this.maxTokens})`, this.verbose);
                     break;
                 }
                 
-                currentTokens += fileTokens;
-                
-                // Track statistics
-                statistics.trackFile(filePath, content, lines);
-                
-                fileInfos.push({ 
+                const fileInfo: FileInfo = { 
                     path: filePath, 
                     content, 
                     lines, 
-                    size: stats.size 
-                });
+                    size: fileStats.size 
+                };
+                
+                // Track statistics
+                stats.trackFile(fileInfo, primaryPath);
+                
+                fileInfos.push(fileInfo);
             } catch (error: any) {
-                if (error.code === 'ENOENT') {
-                    logWarning(`File '${filePath}' not found`);
-                } else if (error.code === 'EACCES') {
-                    logWarning(`Permission denied reading '${filePath}'`);
-                } else if (error.code === 'EISDIR') {
-                    logWarning(`'${filePath}' is a directory, not a file`);
-                } else {
-                    logWarning(`Could not read file '${filePath}': ${error.message}`);
-                }
+                logFileError(filePath, error);
             }
         }
         
+        // Update repoInfo with collected data
         this.repoInfo.files = fileInfos;
-        this.repoInfo.totalFiles = this.repoInfo.files.length;
-        this.repoInfo.totalLines = calculateTotalLines(this.repoInfo.files);
-        this.repoInfo.totalTokens = calculateTotalTokens(this.repoInfo.files);
-        this.repoInfo.totalCharacters = statistics.getTotalCharacters();
-        this.repoInfo.directoriesProcessed = statistics.getDirectoriesCount();
-        this.repoInfo.fileTypes = statistics.getFileTypes();
-        this.repoInfo.largestFile = statistics.getLargestFile();
-        this.repoInfo.averageFileSize = this.repoInfo.totalFiles > 0 ? 
-            Math.round(this.repoInfo.totalLines / this.repoInfo.totalFiles) : 0;
+        this.repoInfo.totalFiles = fileInfos.length;
+        this.repoInfo.totalLines = this.calculateTotalLines(fileInfos);
+        this.repoInfo.totalTokens = this.calculateTotalTokens(fileInfos);
+        this.repoInfo.totalCharacters = stats.getTotalCharacters();
+        this.repoInfo.directoriesProcessed = stats.getDirectoriesProcessedCount();
+        this.repoInfo.fileTypes = stats.getFileTypes();
+        this.repoInfo.largestFile = stats.getLargestFile();
+        this.repoInfo.averageFileSize = stats.calculateAverageFileSize(fileInfos);
+    }
+
+    // Make sure these methods exist and are properly defined
+    private calculateTotalLines(files: FileInfo[]): number {
+        return files.reduce((total, file) => total + file.lines, 0);
+    }
+
+    private calculateTotalTokens(files: FileInfo[]): number {
+        return files.reduce((total, file) => total + calculateTokens(file.content), 0);
     }
 
     public getRepoInfo(): RepoInfo {

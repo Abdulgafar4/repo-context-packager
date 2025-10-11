@@ -1,205 +1,335 @@
 Overview
-You are tasked with building a Repository Context Packager command-line tool that analyzes local git repositories and creates a text file containing repository content optimized for sharing with Large Language Models (LLMs).
+This week we are going to practice rewriting git history. We're also going to give our 0.1 Release project a bit of a clean-up, and start to refactor the code.
 
-When developers want to get help from ChatGPT or other LLMs about their code, they often struggle with how to share their codebase effectively. They might copy-paste individual files, but this loses important context about the project structure, dependencies, and relationships between files. Your tool will solve this by automatically collecting and formatting repository content into a single, well-structured text file that can be easily shared with any LLM.
+This lab will help you practice the following:
 
-Your tool will scan a local repository directory, collect relevant files and information, and output a formatted text document that includes:
+creating branches to work on evolving your code
+refactoring existing code to make it easier to read, easier to maintain, and more modular
+using git rebase to rewrite history on a branch
+using git commit --amend to add things to a previous commit and update a commit message
+using git merge
+NOTE: it is highly recommended that you watch this week's video on git rebasing before you start this lab.
 
-Basic git information
-Project structure overview
-File contents with clear separators
-Basic metadata
-What You're Building
-You are building a CLI tool that takes a repository (or parts of it) as input and outputs a formatted text file containing the repository's content in a structure that's easy for LLMs to understand.
+Refactoring
+As code evolves and grows new features, the complexity of the code often grows with it. We add features and in doing so we are forced to create new code paths, functions, classes, etc. It's easy to start losing control of the code.
 
-Example Usage (assuming the tool is named tool-name until you pick a name):
+This process of quickly extending software without managing the quality of the code is known as technical debt. Just as we must borrow money in order to buy a home, writing large software projects typically involves taking on debt, as we merge code that is good enough, but could be better if we had more time. Eventually, we'll need to pay-down this technical debt, and fix our code, or risk going bankrupt!
 
-# Package the current directory
-tool-name .
+Understanding Refactoring
+Refactoring is a technique for improving the structure and maintainability of your code without altering its behaviour. We aren't adding new features or fixing bugs; we're improving the quality of the code itself.
 
-# Package a specific repo directory
-tool-name /home/student1/Seneca/major-project
+Let's walk through a simple example of how we might refactor some code. Imagine the following program in file.js, which defines, analyzes, and prints some data:
 
-# Package specific files
-tool-name src/main.js src/utils.js
+// age group 0-19
+let total1 = 15 + 16 + 17;
+let average1 = (15 + 16 + 17) / 3;
+console.log(`Case data for population age group 0-19: total=${total1} average=${average1}`);
 
-# Package with output file
-tool-name . -o my-project-context.txt
+// age group 20-39
+let total2 = 56 + 2 + 67;
+let average2 = (56 + 2 + 67) / 3;
+console.log(`Case data for population age group 20-39: total=${total2} average=${average2}`);
+Running our program produces the following output:
 
-# Package only JavaScript files
-tool-name . --include "*.js"
-Example Output Format:
+$ node file.js
+Case data for population age group 0-19: total=48 average=16
+Case data for population age group 20-39: total=125 average=41.666666666666664
+The program works, but the code is not as good as it could be. For one thing, we've copy/pasted some code in order to go quickly, and our variable names are really bad. When we need to add some additional age groups, doing more "copy/paste" programming is only going to make things worse.
 
-# Repository Context
+We really want to make this code easier to work with, easier to understand, and easier to extend. Our goal is to keep the output the same, but improve the readability, maintainability, and structure of the code.
 
-## File System Location
+Improving Code through Refactoring
+There are all kinds of common refactoring patterns we could use, but let's focus on a couple of obvious improvements.
 
-/absolute/path/to/repo/being/analyzed
+First, we're repeating code, which is going to make it harder to change or maintain (i.e., if we find a bug in one spot, we have to remember to go and fix it in all the other copy/pasted versions). It would be nice if we could reduce the amount of duplication we're seeing.
 
-## Git Info
+Second, our variable naming is terrible, and it's taking too long to figure out what each line is doing.
 
-- Commit: e45f8911e2ca40223faf2309bf1996443f2df336
-- Branch: main
-- Author: Kim Lee <kim.lee@email.com>
-- Date: Thu Aug 28 16:07:19 2025 -0400
+Let's refactor and improve our code by:
 
-## Structure
-```
-src/
-  main.js
-  utils/
-    helper.js
-package.json
-```
+extracting functions
+extracting classes to avoid duplication;
+renaming variables
+splitting the code into multiple files
+Step 1: Refactoring with Git, Creating a Refactoring Branch
+Because we'll be making significant changes to our code, we want to be careful not to break our current, working program. It might not be pretty, but at least it works!
 
-## File Contents
+Let's move our development off of the main branch and create a separate and isolated refactoring branch:
 
-### File: package.json
-```json
-{
-  "name": "my-project",
-  "version": "1.0.0"
+# Make sure we have everything from GitHub in our local repo before we start
+git checkout main
+git pull origin main
+# Create a new topic branch off of main
+git checkout -b refactoring main
+Now we can commit changes as we go without fear of destroying our current program. If at any time we need to quickly re-run our working program, we can git checkout main and everything will still be there.
+
+Step 2: Extracting a Function
+Our program is calculating averages in multiple places and repeating the same code each time. This is error prone, since we could make a mistake in one of the calculations. Also, it's impossible to test our program's logic without manually testing every single instance of our average calculation (e.g., two of them could work, but a third could be wrong).
+
+Let's extract the average functionality into its own function, which we can call in multiple places:
+
+// Calculate the average for a set of numbers
+function average(...numbers) {
+  let total = 0;
+  let count = numbers.length;
+  for(let i = 0; i < count; i++) {
+    total += numbers[i];
+  }
+  return total / count;
 }
-```
 
-### File: src/main.js
-```javascript
-const helper = require('./utils/helper');
+// age group 0-19
+let total1 = 15 + 16 + 17;
+let average1 = average(15, 16, 17);
+console.log(`Case data for population age group 0-19: total=${total1} average=${average1}`);
 
-function main() {
-  console.log('Hello World');
+// age group 20-39
+let total2 = 56 + 2 + 67;
+let average2 = average(56, 2, 67);
+console.log(`Case data for population age group 20-39: total=${total2} average=${average2}`);
+This is getting better. Instead of repeating our average calculation over and over, we're now able to do it once in a single function. The name of the function helps us understand its purpose, and if we get the calculation right, it will work perfectly every time we call it.
+
+After testing that everything still works, we commit to our refactoring branch:
+
+$ git add file.js
+$ git commit -m "Extract average() function"
+Step 3: Extracting a Second Function
+Our first refactoring step revealed that we're actually repeating ourselves in multiple places: our average() function requires a total, which we also need to calculate for each age group.
+
+Luckily, we've already written the code for calculating a total, and can extract that too into a reusable function, which will simplify our average() implementation as well:
+
+// Calculate the total for a set of numbers
+function sum(...numbers) {
+  let total = 0;
+  let count = numbers.length;
+  for(let i = 0; i < count; i++) {
+    total += numbers[i];
+  }
+  return total;
 }
-```
 
-### File: src/utils/helper.js
-```javascript
-function formatString(str) {
-  return str.trim();
+// Calculate the average for a set of numbers
+function average(...numbers) {
+  return sum(...numbers) / numbers.length;
 }
 
-module.exports = { formatString };
-```
+// age group 0-19
+let total1 = sum(15, 16, 17);
+let average1 = average(15, 16, 17);
+console.log(`Case data for population age group 0-19: total=${total1} average=${average1}`);
 
-## Summary
-- Total files: 3
-- Total lines: 14
-This first release is designed to expose you to the common workflows and tools involved in contributing to open source projects on GitHub. In order to give every student a similar learning experience, we will all be working on the same project.
+// age group 20-39
+let total2 = sum(56, 2, 67);
+let average2 = average(56, 2, 67);
+console.log(`Case data for population age group 20-39: total=${total2} average=${average2}`);
+This is even better. We only have a single function for calculating totals and averages, and once we know they work, they will work everywhere. If we find a bug in one of them, we can fix it once, and it will be fixed for the whole program.
 
-Learning Goals
-In addition to the actual code you will write, the ultimate goal of this first release is to help you gain experience in many aspects of open source development, specifically:
+After testing that everything still works, we commit to our refactoring branch a second time:
 
-programming language by building a real-world tool
-learning about file system operations, text processing, and CLI development
-understanding repository structure and common development patterns
-working with the basics of git, including branches, commits, etc.
-creating open source projects on GitHub
-writing about your own work via your Blog
-Getting Started
-Choose your programming language
-Set up your GitHub repository
-Implement basic CLI argument parsing
-Add file/directory reading functionality
-Implement the output format
-Add git integration
-Choose and implement 2 optional features
-Features
-Required Features (implement ALL)
-To begin, your tool must include all of the following:
+$ git add file.js
+$ git commit -m "Extract sum() function, refactor average() to re-use sum()"
+Step 3: Extracting a Class
+One of the things we're noticing about the code is that the total and average are closely connected: we end-up needing one to calculate the other, and we're having to type the same data over and over again. Every time we type the same thing, or copy/paste code, it feels like it's too easy to make mistake. It seems like this data is really part of something larger, and it might make more sense to combine it together into a single class:
 
-Project Setup: Create a GitHub repo with a clear name, LICENSE file using an approved open source license, and proper README.md file.
+class Data {
+  constructor(...numbers) {
+    this.numbers = numbers;
+  }
 
-Basic CLI Interface:
+  // Calculate the total for the set of numbers
+  sum() {
+    let numbers = this.numbers;
+    let total = 0;
+    let count = numbers.length;
+    for(let i = 0; i < count; i++) {
+      total += numbers[i];
+    }
+    return total;
+  }      
 
---version or -v flag prints tool name and version
---help or -h flag prints usage information
-Accept one or more file and directory paths as arguments
-File Discovery: Your tool should be able to:
+  // Calculate the average for the set of numbers
+  average() {
+    return this.sum() / this.numbers.length;
+  }
+}
 
-# Analyze current directory
-tool-name .
+// age group 0-19
+let data1 = new Data(15, 16, 17);
+console.log(`Case data for population age group 0-19: total=${data1.sum()} average=${data1.average()}`);
 
-# Analyze specific directory
-tool-name ./src
+// age group 20-39
+let data2 = new Data(56, 2, 67);
+console.log(`Case data for population age group 20-39: total=${data2.sum()} average=${data2.average()}`);
+This is great. We've cut in half the number of times we have to enter the lists of data, which reduces the chances we make a mistake. Now we're encapsulating our data in a single object that can manage the analysis without knowledge of the rest of the program.
 
-# Analyze specific files
-tool-name file1.js file2.py
-Basic Output Format: Generate output that includes:
+After testing that everything still works, we commit to our refactoring branch a third time:
 
-Absolute path to repo in the filesystem. All other paths can be relative to this.
-If the directory is a git repo, include basic git information about the current commit (commit SHA, branch, author, date), otherwise "Not a git repository"
-A project structure tree (showing directories and files). You can figure out the best way to represent this.
-File contents with clear headers and separators
-Basic summary statistics (file count, total lines, etc.)
-Standard Streams:
+$ git add file.js
+$ git commit -m "Refactor sum() and average() into a Data class"
+Step 3: Code Splitting
+Our program isn't huge, but it's getting a bit larger than it needs to be. Our new Data class is really something separate from our main program. We decide to break our file.js into two files: our main program in index.js; and our Data class in data.js:
 
-Output the packaged content to stdout by default
-Write errors, messages, and any debug info to stderr
-File Reading: Read and include the contents of text files in the output package. For very large files (>16KB), consider truncating with a note about the truncation or come up with another way to "shorten" the file so that we can include some of it.
+data.js
+class Data {
+  constructor(...numbers) {
+    this.numbers = numbers;
+  }
 
-Error Handling: Handle permission and other errors gracefully, skipping files that can't be processed and note them in stderr. Provide helpful error messages for common issues.
+  // Calculate the total for the set of numbers
+  sum() {
+    let numbers = this.numbers;
+    let total = 0;
+    let count = numbers.length;
+    for(let i = 0; i < count; i++) {
+      total += numbers[i];
+    }
+    return total;
+  }      
 
-Optional Features (implement at least 2)
-Pick at least 2 of the following to implement:
+  // Calculate the average for the set of numbers
+  average() {
+    return this.sum() / this.numbers.length;
+  }
+}
 
-Output to File:
+// Export our Data class
+module.exports.Data = Data;
+index.js
+We need to rename file.js to index.js in git:
 
-tool-name . -o output.txt
-tool-name . --output context-package.md
-File Filtering by Extension:
+$ git mv file.js index.js
+Now we can update its contents:
 
-# Only include JavaScript files
-tool-name . --include "*.js"
+// Import our Data class
+const { Data } = require('./data');
 
-# Include multiple extensions
-tool-name . --include "*.js,*.py,*.md"
-File Exclusion:
+// age group 0-19
+let data1 = new Data(15, 16, 17);
+console.log(`Case data for population age group 0-19: total=${data1.sum()} average=${data1.average()}`);
 
-# Exclude test files
-tool-name . --exclude "*test*"
+// age group 20-39
+let data2 = new Data(56, 2, 67);
+console.log(`Case data for population age group 20-39: total=${data2.sum()} average=${data2.average()}`);
+This is way better. Our program is now made up of a few smaller units, each of which is easy to read and stands on its own. Having programs split across multiple files also makes things easier when working with git, since it means there's less chance that two people will be working on the same line(s) in the same file(s).
 
-# Exclude multiple patterns
-tool-name . --exclude "*.log,node_modules,*.tmp"
-Gitignore Integration: Automatically exclude files and directories listed in .gitignore
+After testing that everything still works, we commit to our refactoring branch a fourth time:
 
-Token Counting: Provide estimated token counts using a simple approximation (e.g., ~4 characters per token for English text):
+$ git add index.js data.js
+$ git commit -m "Split file.js into index.js and data.js"
+Step 4: Improving Names
+There's one last obvious improvement that we can make: our variable names are terrible. Using names like data1 and data2 is often known as a "bad code smell." Something is "off" with this, you can just sense it, even if you aren't sure exactly why. Names that have to be looked up in order to know what they are don't work (quick: which age group does data2 store?).
 
-tool-name . --tokens
-# Output: Estimated tokens: 1,247
-Size Limits: Allow limiting output size:
+Let's use better names for our data:
 
-# Limit to files under 1KB each
-tool-name . --max-file-size 1024
+// Import our Data class
+const { Data } = require('./data');
 
-# Stop when total output reaches ~4000 tokens
-tool-name . --max-tokens 4000
-Different Output Formats:
+// age group 0-19
+let ageGroupUnder19 = new Data(15, 16, 17);
+console.log(`Case data for population age group 0-19: total=${ageGroupUnder19.sum()} average=${ageGroupUnder19.average()}`);
 
-# Output as JSON
-tool-name . --format json
+// age group 20-39
+let ageGroup20to39 = new Data(56, 2, 67);
+console.log(`Case data for population age group 20-39: total=${ageGroup20to39.sum()} average=${ageGroup20to39.average()}`);
+We can argue about the best names to use here, but no matter what we settle on, we've made a big improvement over data2.
 
-# Output as YAML
-tool-name . --format yaml
+After testing that everything still works, we commit to our refactoring branch a fifth time:
 
-# Output as Markdown (default)
-tool-name . --format markdown
-Binary File Handling: Detect binary files (e.g., .jpg, .exe, .pdf, etc.) and either skip them or include just their metadata (filename, size, type)
+$ git add index.js
+$ git commit -m "Rename age group variables to be more clear"
+Step 5: Rebasing and Squashing
+Now that we've finished our refactoring, let's get ready to merge this work into main. However, before we do, let's squash everything into a single commit. It took us 5 commits to refactor this code, but in our mind, the end product is really one single thing: we don't care about the steps it took to get here, just the end result.
 
-Implementation Notes
-Start simple: get basic file reading and directory traversal working first
-Focus on text files initially (source code, documentation, config files)
-Use your language's standard library for file operations when possible
-Use existing libraries for features like glob patterns or tree display
-Test with your own project directory as you build it
-Getting Help
-For this assignment, everyone must create their own project, but that doesn't mean you can't talk to your colleagues. At every stage of your work, make sure you ask for help, share ideas, and get feedback from others in the class. You're also welcome to program together and help each other and/or use AI to help solve problems. However, you are required to do the project yourself, since you will be extending and maintaining this code throughout the term. It's critical that you know how everything works and don't copy/paste code you don't understand and didn't write.
+git rebase main -i
+This will start an interactive rebase, opening our editor, and allowing us to specify what to do with each commit:
 
-Requirements
-You will be graded on the following:
+pick 4710009 Extract average() function
+pick 0c01069 Extract sum() function, refactor average() to re-use sum()
+pick fd8e932 Refactor sum() and average() into a Data class
+pick f9d85bf Split file.js into index.js and data.js
+pick bfac3d3 Rename age group variables to be more clear
 
-GitHub Repo exists with LICENSE and README.md
-README.md clearly explains what the tool does, how to install/run it, and includes examples
-Source code implements all required features and works correctly
-Source code implements at least 2 optional features
-Code is well-organized with good naming and comments
-Blog post documents your experience building the tool and links to your repo
-Add Info to Table Below
+# Rebase ac38daf..bfac3d3 onto ac38daf (2 commands)
+#
+# Commands:
+# p, pick <commit> = use commit
+# r, reword <commit> = use commit, but edit the commit message
+# e, edit <commit> = use commit, but stop for amending
+# s, squash <commit> = use commit, but meld into previous commit
+# f, fixup <commit> = like "squash", but discard this commit's log message
+# x, exec <command> = run command (the rest of the line) using shell
+# b, break = stop here (continue rebase later with 'git rebase --continue')
+# d, drop <commit> = remove commit
+# l, label <label> = label current HEAD with a name
+# t, reset <label> = reset HEAD to a label
+# m, merge [-C <commit> | -c <commit>] <label> [# <oneline>]
+# .       create a merge commit using the original merge commit's
+# .       message (or the oneline, if no original merge commit was
+# .       specified). Use -c <commit> to reword the commit message.
+#
+# These lines can be re-ordered; they are executed from top to bottom.
+#
+# If you remove a line here THAT COMMIT WILL BE LOST.
+#
+# However, if you remove everything, the rebase will be aborted.
+#
+We want to squash the last 4 commits (squash) into the first (pick):
+
+pick 4710009 Extract average() function
+squash 0c01069 Extract sum() function, refactor average() to re-use sum()
+squash fd8e932 Refactor sum() and average() into a Data class
+squash f9d85bf Split file.js into index.js and data.js
+squash bfac3d3 Rename age group variables to be more clear
+After we save the file, git will create a new commit that uses the changes from all 5 commits in a single commit. The log message will include the combined log messages of all 5 commits.
+
+Try running git log to confirm that it worked.
+
+Step 5: Amending a Commit
+Just as we finish our last step, we realize that our commit message wasn't quite right. We really want to change it before we merge. To do that, we'll do an amended commit, which will change the previous commit instead of making a new one:
+
+git commit --amend
+This will open your editor again with the previous log message, which we change like so:
+
+Refactoring file.js to improve code maintainability:
+
+  * Extract average() function
+  * Extract sum() function, refactor average() to re-use sum()
+  * Refactor sum() and average() into a Data class
+  * Split file.js into index.js and data.js
+  * Rename age group variables to be more clear
+We save and the commit is updated with the new message. Once again, check that it worked with git log and git show to see the changes.
+
+NOTE: you can also use git --amend --no-edit if you want to update the previous commit to add/change something, but don't want to change the commit message (--no-edit means leave the commit message as it is).
+
+Step 6: Merging our Work
+Our refactoring branch is finished, and we're ready to merge to main:
+
+git checkout main
+# We should be able to do a simple fast-forward merge
+git merge --ff-only refactoring
+git push origin main
+Our main branch should now include the changes from refactoring in a single commit.
+
+Your Turn to Refactor!
+Based on the example refactoring walk-through you just read, it's your turn to improve some code. You are asked to refactor your own 0.1 Release repo to improve the code's structure, readability, modularity, and maintainability.
+
+Use a similar method to the walk-through above:
+
+create a refactoring branch off of your latest main
+look through your code to find at least 3 improvements you could make. For example:
+get rid of global variables
+use functions instead of variables to calculate things vs. storing them
+separate command-line argument parsing from file parsing from output
+improve variable naming
+reduce code duplication through shared functions, classes, etc
+talk to your friends to see if they have ideas of other improvements you could make
+each refactoring step should be done in a separate commit. Test your code before you commit changes and don't commit anything that breaks the program. Use good commit messages to describe what you did
+each refactoring step can build on the previous one, but don't mix them (e.g., don't solve two separate problems in a single refactoring commit, use two commits instead).
+when you are done, do an Interactive Git Rebase to squash all of your refactoring commits into a single commit
+use an Amended Git Commit to update the commit message to make it more clear
+do a git merge on your main branch to integrate your refactoring branch's changes
+do a git push origin main to share your changes publicly on GitHub
+We will be writing automated tests against this code later, so spend some time refining and improving your code as much as you can.
+
+Write a Blog Post
+Write a blog post about the process of refactoring your code. What did you focus on in your improvements? How did you fix your code so it would be better in each step? How did your interactive rebase go? Did you find any bugs in your code while you did this? Did you break your program while changing things? How did it go using Git to change your project's history?

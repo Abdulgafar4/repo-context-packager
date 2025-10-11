@@ -1,64 +1,131 @@
-import path from 'path';
 import { FileInfo } from './types';
 import { calculateTokens } from './utils';
+import path from 'path';
 
+/**
+ * Handles collection and management of repository statistics.
+ * Tracks file counts, types, sizes, tokens, and other metrics during repository analysis.
+ */
 export class RepositoryStatistics {
+    private totalCharacters: number = 0;
     private fileTypes: Record<string, number> = {};
     private largestFile: { path: string; lines: number } | null = null;
-    private totalCharacters: number = 0;
     private processedDirectories: Set<string> = new Set();
+    private currentTokens: number = 0;
 
-    public trackFile(filePath: string, content: string, lines: number): void {
+    /**
+     * Tracks statistics for a processed file.
+     * 
+     * @param fileInfo - Information about the processed file
+     * @param basePath - Base path for determining relative directories
+     */
+    public trackFile(fileInfo: FileInfo, basePath: string = '.'): void {
+        // Track characters
+        this.totalCharacters += fileInfo.content.length;
+
+        // Track tokens
+        const fileTokens = calculateTokens(fileInfo.content);
+        this.currentTokens += fileTokens;
+
         // Track file types
-        const fileExtension = path.extname(filePath).toLowerCase() || '.txt';
+        const fileExtension = path.extname(fileInfo.path).toLowerCase() || '.txt';
         this.fileTypes[fileExtension] = (this.fileTypes[fileExtension] || 0) + 1;
-        
+
         // Track largest file
-        if (!this.largestFile || lines > this.largestFile.lines) {
-            this.largestFile = { path: filePath, lines };
+        if (!this.largestFile || fileInfo.lines > this.largestFile.lines) {
+            this.largestFile = { path: fileInfo.path, lines: fileInfo.lines };
         }
-        
-        // Track total characters
-        this.totalCharacters += content.length;
-        
+
         // Track directories
-        const directory = path.dirname(filePath);
+        const directory = path.dirname(fileInfo.path);
         if (directory !== '.' && directory !== '') {
             this.processedDirectories.add(directory);
         }
     }
 
-    public getFileTypes(): Record<string, number> {
-        return { ...this.fileTypes };
+    /**
+     * Checks if adding a file would exceed the token limit.
+     * 
+     * @param content - The file content to check
+     * @param maxTokens - Maximum allowed tokens
+     * @returns true if the token limit would be exceeded
+     */
+    public wouldExceedTokenLimit(content: string, maxTokens?: number): boolean {
+        if (!maxTokens) {
+            return false;
+        }
+        const fileTokens = calculateTokens(content);
+        return (this.currentTokens + fileTokens) > maxTokens;
     }
 
-    public getLargestFile(): { path: string; lines: number } | null {
-        return this.largestFile ? { ...this.largestFile } : null;
+    /**
+     * Gets the current token count.
+     * 
+     * @returns Current total tokens
+     */
+    public getCurrentTokens(): number {
+        return this.currentTokens;
     }
 
+    /**
+     * Gets the total character count.
+     * 
+     * @returns Total characters processed
+     */
     public getTotalCharacters(): number {
         return this.totalCharacters;
     }
 
-    public getDirectoriesCount(): number {
+    /**
+     * Gets the file types map.
+     * 
+     * @returns Record of file extensions and their counts
+     */
+    public getFileTypes(): Record<string, number> {
+        return { ...this.fileTypes };
+    }
+
+    /**
+     * Gets the largest file information.
+     * 
+     * @returns Information about the largest file or null
+     */
+    public getLargestFile(): { path: string; lines: number } | null {
+        return this.largestFile ? { ...this.largestFile } : null;
+    }
+
+    /**
+     * Gets the number of directories processed.
+     * 
+     * @returns Count of unique directories
+     */
+    public getDirectoriesProcessedCount(): number {
         return this.processedDirectories.size;
     }
 
-    public calculateAverageFileSize(totalFiles: number): number {
-        return totalFiles > 0 ? Math.round(this.getTotalLines() / totalFiles) : 0;
+    /**
+     * Calculates the average file size from a list of files.
+     * 
+     * @param files - Array of file information
+     * @returns Average file size in lines
+     */
+    public calculateAverageFileSize(files: FileInfo[]): number {
+        if (files.length === 0) {
+            return 0;
+        }
+        const totalLines = files.reduce((total, file) => total + file.lines, 0);
+        return Math.round(totalLines / files.length);
     }
 
-    private getTotalLines(): number {
-        // This will be set from outside or we can track it internally
-        return this.largestFile?.lines || 0;
+    /**
+     * Resets all statistics to initial state.
+     */
+    public reset(): void {
+        this.totalCharacters = 0;
+        this.fileTypes = {};
+        this.largestFile = null;
+        this.processedDirectories.clear();
+        this.currentTokens = 0;
     }
-}
-
-export function calculateTotalLines(files: FileInfo[]): number {
-    return files.reduce((total, file) => total + file.lines, 0);
-}
-
-export function calculateTotalTokens(files: FileInfo[]): number {
-    return files.reduce((total, file) => total + calculateTokens(file.content), 0);
 }
 

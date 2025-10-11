@@ -2,7 +2,10 @@ import { glob } from 'glob';
 import fs from 'fs';
 import path from 'path';
 
-// Default patterns to ignore when collecting files
+/**
+ * Default patterns to ignore when collecting files from a repository.
+ * These patterns follow glob syntax and are applied in addition to .gitignore rules.
+ */
 const DEFAULT_IGNORE_PATTERNS = [
     'node_modules/**', 
     '.git/**', 
@@ -128,6 +131,17 @@ export function formatOutput(content: string): string {
     return `# Output\n\n${content}`;
 }
 
+/**
+ * Estimates the number of tokens in a given text content.
+ * Uses a simple heuristic of approximately 4 characters per token.
+ * 
+ * @param content - The text content to estimate tokens for
+ * @returns The estimated number of tokens
+ */
+export function calculateTokens(content: string): number {
+    return Math.round(content.length / 4);
+}
+
 export function isFileRecentlyModified(filePath: string, days: number): boolean {
     try {
         const stats = fs.statSync(filePath);
@@ -149,11 +163,6 @@ export function truncateContent(content: string, maxLength: number): string {
         return content.substring(0, maxLength) + '... [truncated]';
     }
     return content;
-}
-
-export function calculateTokens(content: string): number {
-    // Rough estimate: 1 token ≈ 4 characters
-    return Math.round(content.length / 4);
 }
 
 function extractPackageJsonSummary(content: string): string {
