@@ -94,7 +94,7 @@ function extractExports(content: string, language: string): string[] {
     
     if (language === 'typescript' || language === 'javascript') {
         // Match export statements
-        const exportRegex = /export\s+(?:default\s+)?(?:function\s+(\w+)|class\s+(\w+)|interface\s+(\w+)|type\s+(\w+)|const\s+(\w+)|let\s+(\w+)|var\s+(\w+))/g;
+        const exportRegex = /export\s+(?:default\s+)?(?:(?:async\s+)?function\s+(\w+)|class\s+(\w+)|interface\s+(\w+)|type\s+(\w+)|const\s+(\w+)|let\s+(\w+)|var\s+(\w+))/g;
         
         let match;
         while ((match = exportRegex.exec(content)) !== null) {

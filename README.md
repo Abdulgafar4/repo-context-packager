@@ -28,6 +28,14 @@ npm install
 npm run build
 ```
 
+## Testing
+Run the test suites with Vitest:
+
+- `npm test` – run the full test suite once.
+- `npm run test:watch` – keep Vitest running and re-run tests on file changes.
+- `npm run test:file -- src/utils.test.ts` – execute a single test file (replace the path as needed).
+- `npm run test:run -- --filter "calculateTokens"` – run only tests matching a filter pattern.
+
 ## Usage
 You can use the tool from the command line as follows:
 
