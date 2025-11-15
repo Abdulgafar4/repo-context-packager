@@ -14,6 +14,11 @@ describe('formatOutput', () => {
         const result = formatOutput('Hello, world!');
         expect(result).toBe('# Output\n\nHello, world!');
     });
+
+    it('handles multi-line content without altering text', () => {
+        const result = formatOutput('Line 1\nLine 2');
+        expect(result).toBe('# Output\n\nLine 1\nLine 2');
+    });
 });
 
 describe('truncateContent', () => {
