@@ -143,5 +143,4 @@ output.md
 test_*.md
 
 # Package lock files
-package-lock.json
 bun.lockb
