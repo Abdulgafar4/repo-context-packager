@@ -587,3 +587,72 @@ to understand, following SOLID principles and reducing technical debt.
 - Git Documentation: `git rebase`, `git reset`, `git commit --amend`
 - DRY Principle (Don't Repeat Yourself)
 
+---
+
+# Leveling Up With Automated Testing
+
+**Author:** Abdulgafar Temitope Tajudeen  
+**Date:** November 7, 2025  
+**Project:** Repository Context Packager
+
+## Why Vitest?
+
+Automated testing was the focus for this lab, so I needed a framework that matched the TypeScript-first nature of the project. I compared Jest and Vitest, and ultimately went with **Vitest** ([docs](https://vitest.dev/)) because:
+
+- It runs tests directly against modern JS/TS without extra transpilation glue.
+- Watch mode and focused test runs are built-in (`vitest --watch`, `vitest run --filter ...`).
+- Coverage via the `@vitest/coverage-istanbul` plugin is a single flag away.
+- The CLI feels familiar coming from Jest, so there was very little learning curve.
+
+The only snag was peer dependency alignment: Vitest 4 expects `@types/node` ≥ 20, while the project was still on 14. Bumping the type definitions resolved the install conflict without touching runtime Node requirements.
+
+## Framework Setup
+
+Getting Vitest wired in was straightforward:
+
+1. Installed the packages: `npm i -D vitest @vitest/coverage-istanbul`.
+2. Added a tiny `vitest.config.ts` to ensure we use the Node environment and to configure coverage reporters.
+3. Replaced the placeholder `npm test` script with `vitest`, added helpers for single runs and watch mode, and exposed coverage via `npm run test:coverage`.
+4. Documented the commands in `README.md` so anyone on the team can run the right workflow quickly.
+
+At this point, `npm test` ran (and passed) an empty suite—mission accomplished for Step 1.
+
+## Building the Test Suite
+
+I started small, writing the very first unit tests around the easiest pure functions:
+
+- `calculateTokens`, `formatOutput`, and `truncateContent` in `src/utils.ts`.
+
+These covered happy paths as well as a couple of edge cases (rounding behaviour and truncation markers). Once that foundation was in place, I layered on additional suites for other parts of the codebase:
+
+1. **Repository statistics** – verified that `RepositoryStatistics` correctly tracks totals, token counts, directory sets, averages, limit checks, and reset behaviour.
+2. **Summarizer** – confirmed that imports, exports, and function metadata are captured, and that the formatted output includes the right cues for summary mode. While writing these tests I discovered that async exports weren’t being picked up; fixing the regex so it recognises `export async function` resulted in the first “aha!” bug found by testing.
+3. **Packager** – used Vitest’s filesystem-friendly test runner to spin up temporary directories, mock Git metadata, and exercise the higher-level workflow. These tests proved that the CLI can:
+   - Analyse files and accumulate RepoInfo.
+   - Generate summary-mode output without throwing.
+   - Respect `maxFileSize` limits and skip oversized files.
+
+Altogether the suite now has 12 tests, touching everything from helper utilities to integration-style Packager runs.
+
+## Running Focused Tests (Step 4)
+
+One pain point with larger projects is rerunning the entire suite while iterating on a single failing test. Vitest’s command-line options make this easy:
+
+- `npm run test:watch` keeps tests hot-reloading as files change.
+- `npm run test:file -- src/packager.test.ts` scopes execution to one file.
+- `npm run test:run -- --filter "Packager"` is handy when I just want the Packager suite.
+
+These scripts, together with the README notes, satisfied Step 4’s “test runner improvements” goal.
+
+## Optional Coverage
+
+Although not strictly required, the coverage command (`npm run test:coverage`) is ready to go thanks to the Istanbul plugin. Running it highlights remaining gaps—logger helpers and some CLI validation branches are still untested—which gives me a roadmap for future edge-case coverage.
+
+## Lessons Learned
+
+- **Targeted unit tests surface subtle bugs.** Without the summarizer tests, I might never have noticed async exports disappearing.
+- **Type alignment matters.** Even small dependencies like `@types/node` can block installation; upgrading them early avoids wasted time.
+- **Integration-style tests add confidence fast.** The Packager suite spins up temporary workspaces, letting me verify real workflows without touching the actual filesystem.
+
+Overall, this lab reinforced that investing in a clean testing setup unlocks safer refactoring and faster iteration. The Repository Context Packager now has a reliable safety net, and I’m more confident shipping improvements in the future.
+
