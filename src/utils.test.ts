@@ -22,6 +22,11 @@ describe('truncateContent', () => {
         expect(truncateContent(content, 50)).toBe(content);
     });
 
+    it('does not truncate when content length equals the max length', () => {
+        const content = 'exact';
+        expect(truncateContent(content, content.length)).toBe(content);
+    });
+
     it('suffixes truncated marker when exceeding the max length', () => {
         const content = 'a'.repeat(10);
         expect(truncateContent(content, 5)).toBe('aaaaa... [truncated]');
