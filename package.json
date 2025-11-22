@@ -1,10 +1,19 @@
 {
-  "name": "repo-context-packager",
-  "version": "1.0.0",
+  "name": "@tajudeen/repo-context-packager",
+  "version": "1.0.3",
   "description": "A command-line tool for packaging repository context for sharing with LLMs.",
-  "main": "src/cli.ts",
+  "main": "dist/cli.js",
+  "bin": {
+    "repo-context-packager": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
+    "postbuild": "node -e \"const fs=require('fs');const f='dist/cli.js';const c=fs.readFileSync(f,'utf8');if(!c.startsWith('#!'))fs.writeFileSync(f,'#!/usr/bin/env node\\n'+c);\"",
     "start": "node dist/cli.js",
     "test": "vitest",
     "test:run": "vitest run",

@@ -1,5 +1,17 @@
 # Repository Context Packager
 
+## Quick Start
+
+```bash
+# Install globally
+npm install -g @tajudeen/repo-context-packager
+
+# Package your current repository
+repo-context-packager .
+
+# View the generated output.md file
+```
+
 ## Overview
 The Repository Context Packager is a command-line tool designed to analyze local git repositories and create a structured text file containing repository content optimized for sharing with Large Language Models (LLMs). This tool helps developers effectively share their codebase with LLMs by providing context about project structure, dependencies, and relationships between files.
 
@@ -19,10 +31,27 @@ The Repository Context Packager is a command-line tool designed to analyze local
 - **Configuration File**: Set default options instead of writing every feature
 
 ## Installation
-To install the Repository Context Packager, clone the repository and install the dependencies:
+
+### Install from npm (Recommended)
+
+Install globally to use the CLI tool from anywhere:
 
 ```bash
-git clone <repository-url>
+npm install -g @tajudeen/repo-context-packager
+```
+
+After installation, you can use the `repo-context-packager` command directly:
+
+```bash
+repo-context-packager --help
+```
+
+### Development Installation
+
+To contribute or modify the tool, clone the repository and install dependencies:
+
+```bash
+git clone https://github.com/abdulgafar4/repo-context-packager.git
 cd repo-context-packager
 npm install
 npm run build
@@ -37,52 +66,60 @@ Run the test suites with Vitest:
 - `npm run test:run -- --filter "calculateTokens"` – run only tests matching a filter pattern.
 
 ## Usage
-You can use the tool from the command line as follows:
+
+After installing via npm, use the `repo-context-packager` command (or `repo-context-packager` if installed globally):
 
 ### Package the current directory
 ```bash
-npm start .
+repo-context-packager .
 ```
 
 ### Package a specific repo directory
 ```bash
-npm start /path/to/repo
+repo-context-packager /path/to/repo
 ```
 
 ### Package specific files
 ```bash
-npm start src/
+repo-context-packager src/
 ```
 
 ### Package only JavaScript files
 ```bash
-npm start . --include "*.js"
+repo-context-packager . --include "*.js"
 ```
 
 ### Package with file size limit (under 10KB)
 ```bash
-npm start . --max-file-size 10240
+repo-context-packager . --max-file-size 10240
 ```
 
 ### Package with token estimation and limits
 ```bash
-npm start . --tokens --max-tokens 50000
+repo-context-packager . --tokens --max-tokens 50000
 ```
 
 ### Exclude certain file patterns
 ```bash
-npm start . --exclude "*.log,*.tmp"
+repo-context-packager . --exclude "*.log,*.tmp"
 ```
 
 ### Generate function summaries (85% smaller output)
 ```bash
-npm start . --summary
+repo-context-packager . --summary
 ```
 
 ### Combine summary mode with token estimation
 ```bash
-npm start . --summary --tokens
+repo-context-packager . --summary --tokens
 ```
+
+### Specify custom output file
+```bash
+repo-context-packager . --output my-context.md
+```
+
+**Note:** If you installed via git clone for development, you can still use `npm start` instead of `repo-context-packager`.
 ## Configuration File
 
 You can create a `.repoPackager.toml` file in your project root to set default options:
