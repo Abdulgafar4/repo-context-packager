@@ -1,26 +1,28 @@
 import { Command } from 'commander';
 import { Packager } from './packager';
+import { cloneRepository } from './git';
 import fs from 'fs';
+import os from 'os';
 import chalk from 'chalk';
 import path from 'path';
-import { loadConfig,ConfigOptions } from './config';
+import { loadConfig, ConfigOptions } from './config';
 
 
 const program = new Command();
 
-function applyConfigDefaults(cliOptions: any): any{
+function applyConfigDefaults(cliOptions: any): any {
   const configDefaults = loadConfig();
 
-  return{
-   output: cliOptions.output || configDefaults.output,
-   include: cliOptions.include || configDefaults.include,
-   exclude: cliOptions.exclude || configDefaults.exclude,
-   tokens : cliOptions.tokens ?? configDefaults.tokens,
-   summary: cliOptions.summary ?? configDefaults.summary,
-   verbose: cliOptions.verbose ?? configDefaults.verbose,
-   maxFileSize: cliOptions.maxFileSize || configDefaults.maxFileSize,
-   maxTokens: cliOptions.maxTokens || configDefaults.maxTokens,
-   recent: cliOptions.recent !== undefined ? cliOptions.recent : configDefaults.recent
+  return {
+    output: cliOptions.output || configDefaults.output,
+    include: cliOptions.include || configDefaults.include,
+    exclude: cliOptions.exclude || configDefaults.exclude,
+    tokens: cliOptions.tokens ?? configDefaults.tokens,
+    summary: cliOptions.summary ?? configDefaults.summary,
+    verbose: cliOptions.verbose ?? configDefaults.verbose,
+    maxFileSize: cliOptions.maxFileSize || configDefaults.maxFileSize,
+    maxTokens: cliOptions.maxTokens || configDefaults.maxTokens,
+    recent: cliOptions.recent !== undefined ? cliOptions.recent : configDefaults.recent
   };
 }
 
@@ -64,16 +66,16 @@ function validateOutputPath(outputFile: string): void {
  * @param outputFile - Path to the output file
  */
 async function executePackaging(
-  paths: string[], 
+  paths: string[],
   packagerOptions: any,
   outputFile: string
 ): Promise<void> {
   console.log(chalk.yellow('🔍 Analyzing repository...'));
-  
+
   const packager = new Packager(paths, packagerOptions);
   await packager.analyzeRepository();
   const repoInfo = packager.getRepoInfo();
-  
+
   // Display analysis results
   if (packagerOptions.recent) {
     console.log(chalk.green(`✅ Found ${repoInfo.totalFiles} recent files (modified within ${packagerOptions.recent} days) - ${repoInfo.totalLines} total lines`));
@@ -83,10 +85,10 @@ async function executePackaging(
   if (packagerOptions.tokens) {
     console.log(chalk.cyan(`🔢 Estimated tokens: ${repoInfo.totalTokens}`));
   }
-  
+
   console.log(chalk.yellow('📝 Generating package...'));
   const output = packager.generatePackage();
-  
+
   await fs.promises.writeFile(outputFile, output);
 }
 
@@ -100,10 +102,10 @@ function displayResults(outputFile: string, hasCustomOutput: boolean): void {
   console.log(chalk.gray('━'.repeat(50)));
   console.log(chalk.green.bold(`🎉 Success! Repository context packaged to:`));
   console.log(chalk.blue.underline(path.resolve(outputFile)));
-  
+
   const stats = fs.statSync(outputFile);
   console.log(chalk.gray(`📄 Output file size: ${(stats.size / 1024).toFixed(2)} KB`));
-  
+
   if (!hasCustomOutput) {
     console.log(chalk.gray(`💡 Tip: Use -o <filename> to specify a custom output file`));
   }
@@ -116,50 +118,50 @@ function displayResults(outputFile: string, hasCustomOutput: boolean): void {
  * @param options - Raw command-line options from commander
  * @returns Parsed and validated packager options
  */
-function parseCommandLineOptions(options: any): { 
-  include?: string[], 
-  exclude?: string[], 
-  tokens?: boolean, 
-  maxFileSize?: number, 
-  maxTokens?: number, 
-  summary?: boolean, 
-  recent?: number, 
-  verbose?: boolean 
+function parseCommandLineOptions(options: any): {
+  include?: string[],
+  exclude?: string[],
+  tokens?: boolean,
+  maxFileSize?: number,
+  maxTokens?: number,
+  summary?: boolean,
+  recent?: number,
+  verbose?: boolean
 } {
-  const packagerOptions: { 
-    include?: string[], 
-    exclude?: string[], 
-    tokens?: boolean, 
-    maxFileSize?: number, 
-    maxTokens?: number, 
-    summary?: boolean, 
-    recent?: number, 
-    verbose?: boolean 
+  const packagerOptions: {
+    include?: string[],
+    exclude?: string[],
+    tokens?: boolean,
+    maxFileSize?: number,
+    maxTokens?: number,
+    summary?: boolean,
+    recent?: number,
+    verbose?: boolean
   } = {};
-  
+
   // Parse include patterns
   if (options.include) {
     packagerOptions.include = options.include.split(',').map((p: string) => p.trim());
   }
-  
+
   // Parse exclude patterns
   if (options.exclude) {
     packagerOptions.exclude = options.exclude.split(',').map((p: string) => p.trim());
   }
-  
+
   // Parse boolean flags
   if (options.tokens) {
     packagerOptions.tokens = options.tokens;
   }
-  
+
   if (options.summary) {
     packagerOptions.summary = options.summary;
   }
-  
+
   if (options.verbose) {
     packagerOptions.verbose = options.verbose;
   }
-  
+
   // Parse and validate recent option
   if (options.recent !== undefined) {
     let recentDays: number;
@@ -175,7 +177,7 @@ function parseCommandLineOptions(options: any): {
     }
     packagerOptions.recent = recentDays;
   }
-  
+
   // Parse and validate maxFileSize option
   if (options.maxFileSize) {
     const maxFileSize = parseInt(options.maxFileSize, 10);
@@ -185,7 +187,7 @@ function parseCommandLineOptions(options: any): {
     }
     packagerOptions.maxFileSize = maxFileSize;
   }
-  
+
   // Parse and validate maxTokens option
   if (options.maxTokens) {
     const maxTokens = parseInt(options.maxTokens, 10);
@@ -195,7 +197,7 @@ function parseCommandLineOptions(options: any): {
     }
     packagerOptions.maxTokens = maxTokens;
   }
-  
+
   return packagerOptions;
 }
 
@@ -228,13 +230,44 @@ program
     const outputFile = options.output || 'output.md';
     validateOutputPath(outputFile);
 
-    // Execute packaging
+    // Check if the first path is a GitHub URL
+    const isUrl = (str: string) => /^https?:\/\/github\.com\/[\w-]+\/[\w.-]+/.test(str);
+
+    let tempDir: string | null = null;
+    let processingPaths = paths;
+
     try {
-      await executePackaging(paths, packagerOptions, outputFile);
+      if (paths.length === 1 && isUrl(paths[0])) {
+        const url = paths[0];
+        console.log(chalk.cyan(`🌐 Detected GitHub URL: ${url}`));
+
+        // Create temp directory
+        tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-context-'));
+        console.log(chalk.gray(`📂 Created temporary directory: ${tempDir}`));
+
+        // Clone repository
+        console.log(chalk.yellow('⬇️  Cloning repository...'));
+        cloneRepository(url, tempDir);
+
+        processingPaths = [tempDir];
+      }
+
+      // Execute packaging
+      await executePackaging(processingPaths, packagerOptions, outputFile);
       displayResults(outputFile, !!options.output);
     } catch (error) {
       console.error(chalk.red(`❌ Error: ${(error as Error).message}`));
       process.exit(1);
+    } finally {
+      // Cleanup temp directory
+      if (tempDir && fs.existsSync(tempDir)) {
+        console.log(chalk.gray('🧹 Cleaning up temporary directory...'));
+        try {
+          fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+          console.warn(chalk.yellow(`⚠️  Warning: Failed to cleanup temporary directory: ${(cleanupError as Error).message}`));
+        }
+      }
     }
   });
 
